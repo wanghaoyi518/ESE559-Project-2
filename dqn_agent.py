@@ -54,7 +54,7 @@ class DQNAgent:
     
     def __init__(self, state_dim=3, action_dim=23, hidden_dim=128, 
                  learning_rate=0.0005, gamma=0.99, epsilon=1.0, 
-                 epsilon_min=0.01, epsilon_decay=0.998, 
+                 epsilon_min=0.001, epsilon_decay=0.998, 
                  target_update_freq=10, memory_size=100000, 
                  device=None, goal_position=(1.2, 1.2)):
         """
@@ -323,6 +323,128 @@ class DQNAgent:
         print(f"Model loaded from {path}")
         return True
 
+class EnhancedDQNAgent(DQNAgent):
+    """
+    Enhanced DQN agent for Problem 2 with environmental uncertainty.
+    
+    This agent extends the base DQNAgent to handle obstacle information
+    and learn a generalizable policy across different environments.
+    """
+    
+    def __init__(self, state_dim=11, action_dim=23, hidden_dim=128, 
+                 learning_rate=0.0005, gamma=0.99, epsilon=1.0, 
+                 epsilon_min=0.001, epsilon_decay=0.998, 
+                 target_update_freq=10, memory_size=100000, 
+                 device=None, goal_position=(1.2, 1.2)):
+        """Initialize the Enhanced DQN agent with a larger state dimension."""
+        super().__init__(state_dim=state_dim, action_dim=action_dim, 
+                        hidden_dim=hidden_dim, learning_rate=learning_rate,
+                        gamma=gamma, epsilon=epsilon, epsilon_min=epsilon_min,
+                        epsilon_decay=epsilon_decay, target_update_freq=target_update_freq,
+                        memory_size=memory_size, device=device, goal_position=goal_position)
+    
+    def get_enhanced_state(self, state, obstacles):
+        """
+        Create an enhanced state representation that includes obstacle information.
+        
+        Args:
+            state (tuple): Robot state (px, py, phi).
+            obstacles (list): List of obstacle dictionaries.
+            
+        Returns:
+            numpy.ndarray: Enhanced state representation.
+        """
+        # Extract basic state
+        px, py, phi = state
+        
+        # Calculate goal-relative features
+        gx, gy = self.goal_position
+        
+        # Distance to goal
+        dist_to_goal = np.sqrt((px - gx)**2 + (py - gy)**2)
+        
+        # Angle to goal relative to current orientation
+        angle_to_goal = np.arctan2(gy - py, gx - px)
+        angle_diff = self.normalize_angle(angle_to_goal - phi)
+        
+        # Calculate distances and angles to the three obstacles
+        obstacle_features = []
+        
+        # Sort obstacles by distance to robot
+        sorted_obstacles = sorted(obstacles, key=lambda obs: 
+                                 np.sqrt((px - obs['x'])**2 + (py - obs['y'])**2))
+        
+        # Take the three obstacles (or fewer if there are less than 3)
+        for i in range(min(3, len(sorted_obstacles))):
+            obs = sorted_obstacles[i]
+            
+            # Distance to obstacle
+            dist = np.sqrt((px - obs['x'])**2 + (py - obs['y'])**2)
+            
+            # Angle to obstacle relative to current orientation
+            angle = np.arctan2(obs['y'] - py, obs['x'] - px)
+            rel_angle = self.normalize_angle(angle - phi)
+            
+            obstacle_features.extend([dist, rel_angle])
+        
+        # Pad with zeros if fewer than 3 obstacles
+        while len(obstacle_features) < 6:  # 6 = 3 obstacles * 2 features (dist, angle)
+            obstacle_features.extend([10.0, 0.0])  # Large distance, zero angle
+        
+        # Combine all features
+        return np.array([px, py, phi, dist_to_goal, angle_diff] + obstacle_features, 
+                        dtype=np.float32)
+    
+    def select_action(self, state, obstacles, epsilon=None):
+        """
+        Select an action using epsilon-greedy policy with obstacle awareness.
+        
+        Args:
+            state (tuple): Robot state (px, py, phi).
+            obstacles (list): List of obstacle dictionaries.
+            epsilon (float, optional): Override epsilon value for exploration.
+            
+        Returns:
+            int: Selected action index.
+        """
+        # Use instance epsilon if not provided
+        if epsilon is None:
+            epsilon = self.epsilon
+        
+        # With probability epsilon, select random action (exploration)
+        if random.random() < epsilon:
+            return random.randint(0, self.action_dim - 1)
+        
+        # Otherwise, select best action according to Q-network (exploitation)
+        state_rep = self.get_enhanced_state(state, obstacles)
+        state_tensor = torch.FloatTensor(state_rep).unsqueeze(0).to(self.device)
+        
+        # No gradient calculation needed for action selection
+        with torch.no_grad():
+            q_values = self.policy_net(state_tensor)
+            
+        # Return action with highest Q-value
+        return q_values.max(1)[1].item()
+    
+    def remember(self, state, obstacles, action, reward, next_state, next_obstacles, done):
+        """
+        Store experience in replay memory with obstacle information.
+        
+        Args:
+            state (tuple): Current state (px, py, phi).
+            obstacles (list): Current obstacle configuration.
+            action (int): Action taken.
+            reward (float): Reward received.
+            next_state (tuple): Next state (px, py, phi).
+            next_obstacles (list): Next obstacle configuration (usually same as obstacles).
+            done (bool): Whether the episode is done.
+        """
+        # Convert raw states to enhanced representation
+        state_rep = self.get_enhanced_state(state, obstacles)
+        next_state_rep = self.get_enhanced_state(next_state, next_obstacles)
+        
+        # Store in memory
+        self.memory.append((state_rep, action, reward, next_state_rep, done))
 
 # Example usage
 if __name__ == "__main__":

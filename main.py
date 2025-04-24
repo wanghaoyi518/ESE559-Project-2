@@ -5,41 +5,31 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-from environment import RobotEnv
-from dqn_agent import DQNAgent
-from train import train
-from test import test_problem1
-
-def set_seed(seed):
-    """
-    Set random seeds for reproducibility.
-    
-    Args:
-        seed (int): Random seed.
-    """
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+from environment import *
+from dqn_agent import *
+from train import *
+from test import *
+from utils import *
 
 def main():
     """Main function to parse arguments and start training or testing."""
-    parser = argparse.ArgumentParser(description='DQN for Robot Navigation - Problem 1')
-    parser.add_argument('--mode', type=str, default='train', choices=['train', 'test'], help='Mode: train or test')
+    parser = argparse.ArgumentParser(description='DQN for Robot Navigation - ESE 559 Project 2')
     
+    # Problem selection
+    parser.add_argument('--problem', type=int, default=1, choices=[1, 2], 
+                        help='Problem number to solve (1 or 2)')
+    parser.add_argument('--mode', type=str, default='train', choices=['train', 'test'], 
+                        help='Mode: train or test')
     # General parameters
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--no-cuda', action='store_true', help='Disable CUDA')
     parser.add_argument('--render', action='store_true', help='Render environment')
     
     # Training parameters
-    parser.add_argument('--episodes', type=int, default=2000, help='Number of training episodes')
+    parser.add_argument('--episodes', type=int, default=3000, help='Number of training episodes')
     parser.add_argument('--batch-size', type=int, default=64, help='Batch size for experience replay')
     parser.add_argument('--learning-rate', type=float, default=0.001, help='Learning rate')
-    parser.add_argument('--gamma', type=float, default=0.99, help='Discount factor')
+    parser.add_argument('--gamma', type=float, default=0.90, help='Discount factor')
     parser.add_argument('--epsilon', type=float, default=1.0, help='Initial exploration rate')
     parser.add_argument('--epsilon-min', type=float, default=0.001, help='Minimum exploration rate')
     parser.add_argument('--epsilon-decay', type=float, default=0.99, help='Exploration decay rate')
@@ -66,79 +56,160 @@ def main():
     
     # Create results directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    results_dir = os.path.join(args.results_dir, f"{args.mode}_{timestamp}")
+    results_dir = os.path.join(args.results_dir, f"problem{args.problem}_{args.mode}_{timestamp}")
     os.makedirs(results_dir, exist_ok=True)
     
-    # Create agent
-    agent = DQNAgent(
-        state_dim=5,  # Change from 3 to 5 to match the enhanced state representation
-        action_dim=23,  # 23 discrete actions
-        hidden_dim=args.hidden_dim,
-        learning_rate=args.learning_rate,
-        gamma=args.gamma,
-        epsilon=args.epsilon,
-        epsilon_min=args.epsilon_min,
-        epsilon_decay=args.epsilon_decay,
-        target_update_freq=args.target_update_freq,
-        memory_size=args.memory_size,
-        device=device
-    )
+    if args.problem == 1:
+        # Problem 1: Fixed environment and goal
+        print(f"Running Problem 1: Fixed environment with goal at (1.2, 1.2)")
+        
+        # Create agent for Problem 1
+        agent = DQNAgent(
+            state_dim=5,  # [px, py, phi, dist_to_goal, angle_diff]
+            action_dim=23,  # 23 discrete actions
+            hidden_dim=args.hidden_dim,
+            learning_rate=args.learning_rate,
+            gamma=args.gamma,
+            epsilon=args.epsilon,
+            epsilon_min=args.epsilon_min,
+            epsilon_decay=args.epsilon_decay,
+            target_update_freq=args.target_update_freq,
+            memory_size=args.memory_size,
+            device=device
+        )
+        
+        if args.mode == 'train':
+            # Train agent for Problem 1
+            print(f"Starting training with {args.episodes} episodes")
+            
+            # Train agent
+            rewards = train(
+                agent=agent,
+                num_episodes=args.episodes,
+                batch_size=args.batch_size,
+                save_freq=args.save_freq,
+                log_freq=args.log_freq,
+                render=args.render,
+                results_dir=results_dir
+            )
+            
+            # After training, save the final model
+            final_model_path = os.path.join(results_dir, "dqn_model_final.pth")
+            agent.save(final_model_path)
+            
+            # Create evaluation directory
+            eval_dir = os.path.join(results_dir, "test_evaluation")
+            os.makedirs(eval_dir, exist_ok=True)
+            
+            # Test the trained agent
+            print("\nEvaluating trained agent...")
+            success_rate, avg_steps = test_problem1(
+                agent=agent,
+                num_trials=args.num_trials,
+                max_steps=args.max_steps,
+                render=args.render,
+                output_dir=eval_dir
+            )
+            
+        elif args.mode == 'test':
+            # Check if model path is provided
+            if args.model_path is None:
+                print("Error: Model path must be provided for testing mode")
+                return
+            
+            # Load trained model
+            success = agent.load(args.model_path)
+            if not success:
+                print(f"Error: Failed to load model from {args.model_path}")
+                return
+            
+            print(f"Loaded model from {args.model_path}")
+            
+            # Test on problem 1 environment
+            success_rate, avg_steps = test_problem1(
+                agent=agent,
+                num_trials=args.num_trials,
+                max_steps=args.max_steps,
+                render=args.render,
+                output_dir=results_dir
+            )
     
-    if args.mode == 'train':
-        # Print training setup
-        print(f"Starting training with {args.episodes} episodes")
+    elif args.problem == 2:
+        # Problem 2: Multiple environments with fixed goal
+        print(f"Running Problem 2: Multiple environments with goal at (1.2, 1.2)")
         
-        # Train agent
-        rewards = train(
-            agent=agent,
-            num_episodes=args.episodes,
-            batch_size=args.batch_size,
-            save_freq=args.save_freq,
-            log_freq=args.log_freq,
-            render=args.render,
-            results_dir=results_dir
+        # Create agent for Problem 2
+        agent = EnhancedDQNAgent(
+            state_dim=11,  # Enhanced state including obstacle information
+            action_dim=23,  # 23 discrete actions
+            hidden_dim=args.hidden_dim,
+            learning_rate=args.learning_rate,
+            gamma=args.gamma,
+            epsilon=args.epsilon,
+            epsilon_min=args.epsilon_min,
+            epsilon_decay=args.epsilon_decay,
+            target_update_freq=args.target_update_freq,
+            memory_size=args.memory_size,
+            device=device
         )
         
-        # After training, save the final model
-        final_model_path = os.path.join(results_dir, "dqn_model_final.pth")
-        agent.save(final_model_path)
-        
-        # Create evaluation directory
-        eval_dir = os.path.join(results_dir, "test_evaluation")
-        os.makedirs(eval_dir, exist_ok=True)
-        
-        # Test the trained agent
-        print("\nEvaluating trained agent...")
-        success_rate, avg_steps = test_problem1(
-            agent=agent,
-            num_trials=args.num_trials,
-            max_steps=args.max_steps,
-            render=args.render,
-            output_dir=eval_dir
-        )
-        
-    elif args.mode == 'test':
-        # Check if model path is provided
-        if args.model_path is None:
-            print("Error: Model path must be provided for testing mode")
-            return
-        
-        # Load trained model
-        success = agent.load(args.model_path)
-        if not success:
-            print(f"Error: Failed to load model from {args.model_path}")
-            return
-        
-        print(f"Loaded model from {args.model_path}")
-        
-        # Test on problem 1 environment
-        success_rate, avg_steps = test_problem1(
-            agent=agent,
-            num_trials=args.num_trials,
-            max_steps=args.max_steps,
-            render=args.render,
-            output_dir=results_dir
-        )
+        if args.mode == 'train':
+            # Train agent for Problem 2
+            print(f"Starting training with {args.episodes} episodes on multiple environments")
+            
+            # Train agent on multiple environments
+            rewards, _ = train_problem2(
+                agent=agent,
+                num_episodes=args.episodes,
+                batch_size=args.batch_size,
+                save_freq=args.save_freq,
+                log_freq=args.log_freq,
+                render=args.render,
+                results_dir=results_dir,
+                update_target_freq=args.target_update_freq,
+                max_steps=args.max_steps
+            )
+            
+            # After training, save the final model
+            final_model_path = os.path.join(results_dir, "dqn_model_final.pth")
+            agent.save(final_model_path)
+            
+            # Create evaluation directory
+            eval_dir = os.path.join(results_dir, "test_evaluation")
+            os.makedirs(eval_dir, exist_ok=True)
+            
+            # Test the trained agent on random environments
+            print("\nEvaluating trained agent on random test environments...")
+            test_results = test_problem2(
+                agent=agent,
+                num_trials=args.num_trials,
+                max_steps=args.max_steps,
+                render=args.render,
+                output_dir=eval_dir
+            )
+            
+        elif args.mode == 'test':
+            # Check if model path is provided
+            if args.model_path is None:
+                print("Error: Model path must be provided for testing mode")
+                return
+            
+            # Load trained model
+            success = agent.load(args.model_path)
+            if not success:
+                print(f"Error: Failed to load model from {args.model_path}")
+                return
+            
+            print(f"Loaded model from {args.model_path}")
+            
+            # Test on random environments
+            test_results = test_problem2(
+                agent=agent,
+                num_trials=args.num_trials,
+                max_steps=args.max_steps,
+                render=args.render,
+                output_dir=results_dir
+            )
 
 if __name__ == "__main__":
     main()

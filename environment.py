@@ -207,10 +207,10 @@ class RobotEnv:
         dist_diff = prev_dist - curr_dist
         reward += 0.8 * dist_diff
         
-        # Add potential-based shaping reward
-        potential_prev = -prev_dist
-        potential_curr = -curr_dist
-        reward += 0.8 * (potential_curr - potential_prev * self.gamma)
+        # # Add potential-based shaping reward
+        # potential_prev = -prev_dist
+        # potential_curr = -curr_dist
+        # reward += 0.8 * (potential_curr - potential_prev * self.gamma)
         
         # Collision penalty
         if collision:
@@ -299,6 +299,112 @@ class RobotEnv:
         
         return fig
 
+class Problem2Env(RobotEnv):
+    """Environment class for Problem 2 with multiple training environments."""
+    
+    def __init__(self, obstacles=None, goal_position=(1.2, 1.2), initial_state=(-1.2, -1.2, 0)):
+        """Initialize environment with custom obstacles configuration."""
+        super().__init__(initial_state)
+        
+        if obstacles is not None:
+            self.obstacles = obstacles
+        
+        self.goal_pos = goal_position
+    
+    @staticmethod
+    def get_training_environments():
+        """Return the predefined training environments for Problem 2."""
+        return [
+            # Case 1
+            [
+                {'x': -0.4, 'y': -0.4, 'r': 0.16},
+                {'x': 0.1, 'y': -0.4, 'r': 0.16},
+                {'x': -0.4, 'y': 0.1, 'r': 0.17}
+            ],
+            # Case 2
+            [
+                {'x': -0.8, 'y': -0.4, 'r': 0.16},
+                {'x': -0.1, 'y': -0.4, 'r': 0.17},
+                {'x': 0.5, 'y': -0.4, 'r': 0.17}
+            ],
+            # Case 3
+            [
+                {'x': -0.6, 'y': 1.0, 'r': 0.17},
+                {'x': -0.6, 'y': -1.0, 'r': 0.16},
+                {'x': 1.0, 'y': -0.6, 'r': 0.17}
+            ]
+        ]
+        
+    @staticmethod
+    def generate_random_test_environment(num_obstacles=3):
+        """Generate random test environments with obstacles."""
+        obstacles = []
+        
+        # Minimum distance between obstacles
+        min_distance = 0.4
+        
+        for _ in range(num_obstacles):
+            valid_position = False
+            
+            while not valid_position:
+                # Generate random position
+                x = np.random.uniform(-1.0, 1.0)
+                y = np.random.uniform(-1.0, 1.0)
+                
+                # Generate random radius from specified range
+                r = np.random.uniform(0.16, 0.20)
+                
+                # Check distance to other obstacles
+                valid_position = True
+                for obs in obstacles:
+                    dist = np.sqrt((x - obs['x'])**2 + (y - obs['y'])**2)
+                    if dist < (r + obs['r'] + min_distance):
+                        valid_position = False
+                        break
+                
+                # Check distance to goal and initial position
+                goal_dist = np.sqrt((x - 1.2)**2 + (y - 1.2)**2)
+                init_dist = np.sqrt((x + 1.2)**2 + (y + 1.2)**2)
+                
+                if goal_dist < (r + 0.3) or init_dist < (r + 0.3):
+                    valid_position = False
+            
+            obstacles.append({'x': x, 'y': y, 'r': r})
+        
+        return obstacles
+        
+    def visualize_environments(self, environments, title="Training Environments"):
+        """Visualize multiple environments in a single figure."""
+        rows = int(np.ceil(len(environments) / 2))
+        fig, axes = plt.subplots(rows, 2, figsize=(15, 5*rows))
+        axes = axes.flatten()
+        
+        for i, obstacles in enumerate(environments):
+            if i < len(axes):
+                ax = axes[i]
+                
+                # Plot obstacles
+                for obs in obstacles:
+                    circle = plt.Circle((obs['x'], obs['y']), obs['r'], color='red', alpha=0.5)
+                    ax.add_patch(circle)
+                
+                # Plot goal
+                goal_circle = plt.Circle(self.goal_pos, self.goal_radius, color='green', alpha=0.3)
+                ax.add_patch(goal_circle)
+                ax.plot(self.goal_pos[0], self.goal_pos[1], 'g*', markersize=10)
+                
+                # Plot initial position area
+                rect = plt.Rectangle((-1.3, -1.3), 0.1, 0.1, color='blue', alpha=0.3)
+                ax.add_patch(rect)
+                
+                ax.set_xlim([self.state_space['x_min'] - 0.2, self.state_space['x_max'] + 0.2])
+                ax.set_ylim([self.state_space['y_min'] - 0.2, self.state_space['y_max'] + 0.2])
+                ax.set_title(f"Environment {i+1}")
+                ax.grid(True)
+        
+        fig.suptitle(title, fontsize=16)
+        plt.tight_layout()
+        return fig
 
 # Example usage
 if __name__ == "__main__":
