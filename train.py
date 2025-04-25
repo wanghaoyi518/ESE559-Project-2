@@ -524,3 +524,276 @@ def train_problem2(agent, num_episodes=2000, batch_size=64,
     print(f"\nTraining completed. Final success rate: {final_success_rate:.2f}%")
     
     return rewards, run_dir
+
+def train_problem3(agent, num_episodes=2000, batch_size=64, 
+                  save_freq=100, log_freq=10, render=False, results_dir='results',
+                  update_target_freq=10, max_steps=150, additional_envs=20):
+    """
+    Train the DQN agent for Problem 3 with multiple environments and variable goals.
+    
+    Args:
+        agent (GoalConditionedDQNAgent): The goal-conditioned DQN agent to train.
+        num_episodes (int): Number of episodes to train for.
+        batch_size (int): Batch size for experience replay.
+        save_freq (int): Frequency of saving the model.
+        log_freq (int): Frequency of logging training progress.
+        render (bool): Whether to render the environment during training.
+        results_dir (str): Directory to save results.
+        update_target_freq (int): Number of episodes after which to update target network.
+        max_steps (int): Maximum steps per episode.
+        additional_envs (int): Number of additional random environments to generate.
+        
+    Returns:
+        tuple: (rewards, run_dir) - List of rewards and the directory where results are saved.
+    """
+    # Create results directory
+    os.makedirs(results_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_dir = os.path.join(results_dir, f"run_{timestamp}")
+    os.makedirs(run_dir, exist_ok=True)
+    
+    # Save training parameters to JSON file for reproducibility
+    training_params = {
+        'problem_type': 'Problem 3',
+        'num_episodes': num_episodes,
+        'batch_size': batch_size,
+        'save_freq': save_freq,
+        'log_freq': log_freq,
+        'render': render,
+        'update_target_freq': update_target_freq,
+        'max_steps': max_steps,
+        'additional_envs': additional_envs,
+        'total_environments': 3 + additional_envs,  # 3 predefined + additional random envs
+        'agent_config': {
+            'state_dim': agent.state_dim,
+            'action_dim': agent.action_dim,
+            'hidden_dim': agent.hidden_dim,
+            'learning_rate': agent.learning_rate,
+            'gamma': agent.gamma,
+            'epsilon': agent.epsilon,
+            'epsilon_min': agent.epsilon_min,
+            'epsilon_decay': agent.epsilon_decay,
+            'memory_size': agent.memory_size,
+            'device': str(agent.device)
+        },
+        'timestamp': timestamp,
+        'start_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    with open(os.path.join(run_dir, 'training_parameters.json'), 'w') as f:
+        json.dump(training_params, f, indent=4)
+    
+    # Initialize tracking
+    rewards = []
+    success_rates = []
+    epsilons = []
+    env_success_tracking = {}  # Track success by environment-goal pair
+    
+    # Get training environments and goals
+    training_envs_goals = Problem3Env.get_training_environments_with_goals(additional_envs=additional_envs)
+    
+    # Create a directory for environment visualizations
+    env_viz_dir = os.path.join(run_dir, "environments")
+    os.makedirs(env_viz_dir, exist_ok=True)
+    
+    # Visualize each training environment with goal
+    for i, (obstacles, goal_pos) in enumerate(training_envs_goals):
+        env = Problem3Env(obstacles=obstacles, goal_position=goal_pos)
+        if i < 3:
+            title = f"Predefined Environment {i+1}, Goal: {goal_pos}"
+        else:
+            title = f"Random Environment {i-2}, Goal: {goal_pos}"
+            
+        fig = env.visualize(title=title)
+        plt.savefig(os.path.join(env_viz_dir, f"env_goal_{i+1}.png"))
+        plt.close(fig)
+        
+        # Initialize environment-goal success tracking
+        env_success_tracking[i] = {
+            'obstacles': obstacles,
+            'goal_position': goal_pos,
+            'attempts': 0,
+            'successes': 0,
+            'last_100_attempts': deque(maxlen=100),
+            'success_rate': 0.0
+        }
+    
+    # Create a grid visualization of sample environments
+    env = Problem3Env()
+    sample_envs = [(obstacles, goal_pos) for obstacles, goal_pos in training_envs_goals[:min(len(training_envs_goals), 20)]]
+    fig = env.visualize_environments_with_goals(sample_envs, "Sample of Training Environments and Goals")
+    plt.savefig(os.path.join(run_dir, "training_environments_goals_sample.png"))
+    plt.close(fig)
+    
+    # Progress bar
+    pbar = tqdm(range(num_episodes), desc="Training")
+    
+    for episode in pbar:
+        # Randomly select a training environment-goal pair
+        env_idx = np.random.randint(0, len(training_envs_goals))
+        obstacles, goal_position = training_envs_goals[env_idx]
+        
+        # Randomly sample initial orientation
+        phi0 = np.random.uniform(-np.pi, np.pi)
+        initial_state = (-1.2, -1.2, phi0)
+        
+        # Create environment
+        env = Problem3Env(obstacles=obstacles, goal_position=goal_position, initial_state=initial_state)
+        
+        # Reset environment
+        state = env.reset()
+        done = False
+        total_reward = 0
+        step = 0
+        
+        # For rendering
+        if render and episode % log_freq == 0:
+            trajectory = [state]
+        
+        # Run episode
+        while not done and step < max_steps:
+            # Select action
+            action = agent.select_action(state, obstacles, goal_position)
+            
+            # Take action
+            next_state, reward, done = env.step(state, action)
+            
+            # Store experience in replay memory
+            agent.remember(state, obstacles, action, reward, next_state, obstacles, done, goal_position)
+            
+            # Update state and accumulate reward
+            state = next_state
+            total_reward += reward
+            step += 1
+            
+            # Record trajectory for rendering
+            if render and episode % log_freq == 0:
+                trajectory.append(state)
+            
+            # Train the agent if enough samples in memory
+            if len(agent.memory) > batch_size:
+                agent.replay(batch_size)
+        
+        # Update target network periodically
+        if episode % update_target_freq == 0:
+            agent.update_target_network()
+            
+        # Decay exploration rate
+        agent.decay_epsilon()
+        
+        # Record data
+        rewards.append(total_reward)
+        epsilons.append(agent.epsilon)
+        success = env.check_goal(state)
+        success_rates.append(1 if success else 0)
+        
+        # Update environment-specific success tracking
+        env_success_tracking[env_idx]['attempts'] += 1
+        env_success_tracking[env_idx]['successes'] += 1 if success else 0
+        env_success_tracking[env_idx]['last_100_attempts'].append(1 if success else 0)
+        env_success_tracking[env_idx]['success_rate'] = (
+            sum(env_success_tracking[env_idx]['last_100_attempts']) / 
+            len(env_success_tracking[env_idx]['last_100_attempts'])
+        )
+        
+        # Update progress bar
+        recent_success_rate = np.mean(success_rates[-min(100, len(success_rates)):]) * 100
+        pbar.set_postfix({
+            'reward': f"{total_reward:.2f}", 
+            'epsilon': f"{agent.epsilon:.4f}",
+            'step': step,
+            'success': f"{recent_success_rate:.1f}%",
+            'env': f"{env_idx+1}/{len(training_envs_goals)}"
+        })
+        
+        # Save model and plots periodically
+        if episode > 0 and episode % save_freq == 0:
+            agent.save(os.path.join(run_dir, f"dqn_model_ep{episode}.pth"))
+            
+            # Plot rewards
+            plot_rewards(rewards, filename=os.path.join(run_dir, 'training_rewards.png'))
+            
+            # Save rewards to file
+            with open(os.path.join(run_dir, 'rewards.json'), 'w') as f:
+                json.dump(rewards, f)
+                
+            # Plot environment-specific success rates
+            plt.figure(figsize=(12, 6))
+            env_indices = sorted(list(env_success_tracking.keys()))
+            success_rates_by_env = [env_success_tracking[i]['success_rate'] for i in env_indices]
+            
+            plt.bar(range(len(env_indices)), success_rates_by_env)
+            plt.xlabel('Environment-Goal Pair Index')
+            plt.ylabel('Success Rate (last 100 attempts)')
+            plt.title(f'Success Rate by Environment-Goal Pair (Episode {episode})')
+            plt.xticks(range(len(env_indices)), [str(i+1) for i in env_indices])
+            plt.grid(True, axis='y')
+            plt.tight_layout()
+            plt.savefig(os.path.join(run_dir, f'env_goal_success_rates_ep{episode}.png'))
+            plt.close()
+        
+        # Render environment and trajectory periodically
+        if render and episode % log_freq == 0:
+            fig = env.visualize(trajectory=trajectory, 
+                             title=f"Episode {episode}, Env-Goal {env_idx+1}, Reward: {total_reward:.2f}")
+            plt.savefig(os.path.join(run_dir, f"episode_{episode}_env_goal_{env_idx+1}.png"))
+            plt.close(fig)
+        
+        # Early stopping if consistently successful across all environments
+        if episode >= 1000 and episode % 100 == 0:
+            # Check if the agent has a high success rate across all environments
+            env_success_rates = [data['success_rate'] for data in env_success_tracking.values() 
+                               if len(data['last_100_attempts']) >= 20]  # Only check environments with sufficient attempts
+            
+            if env_success_rates and np.mean(env_success_rates) > 0.9 and min(env_success_rates) > 0.7:
+                print(f"\nEarly stopping at episode {episode}: High success rates across all environments")
+                print(f"Average: {np.mean(env_success_rates):.2f}, Min: {min(env_success_rates):.2f}")
+                break
+    
+    # Save final model
+    agent.save(os.path.join(run_dir, "dqn_model_final.pth"))
+    
+    # Save final environment success rates
+    env_success_data = {}
+    for env_idx, data in env_success_tracking.items():
+        env_success_data[f"env_goal_{env_idx+1}"] = {
+            'goal_position': data['goal_position'],
+            'attempts': data['attempts'],
+            'successes': data['successes'],
+            'success_rate': data['success_rate'] if len(data['last_100_attempts']) > 0 else 0.0
+        }
+    
+    with open(os.path.join(run_dir, 'environment_goal_success_rates.json'), 'w') as f:
+        json.dump(env_success_data, f, indent=4)
+    
+    # Plot final environment-goal success rates
+    plt.figure(figsize=(12, 6))
+    env_indices = sorted(list(env_success_tracking.keys()))
+    success_rates_by_env = [env_success_tracking[i]['success_rate'] 
+                           if len(env_success_tracking[i]['last_100_attempts']) > 0 else 0.0 
+                           for i in env_indices]
+    
+    plt.bar(range(len(env_indices)), success_rates_by_env)
+    plt.xlabel('Environment-Goal Pair Index')
+    plt.ylabel('Success Rate (last 100 attempts)')
+    plt.title(f'Final Success Rate by Environment-Goal Pair')
+    plt.xticks(range(len(env_indices)), [str(i+1) for i in env_indices], rotation=90)
+    plt.grid(True, axis='y')
+    plt.tight_layout()
+    plt.savefig(os.path.join(run_dir, f'final_env_goal_success_rates.png'))
+    plt.close()
+    
+    # Calculate and save final success rate
+    final_success_rate = np.mean(success_rates[-min(300, len(success_rates))]) * 100
+    with open(os.path.join(run_dir, 'final_stats.json'), 'w') as f:
+        json.dump({
+            'final_success_rate': final_success_rate,
+            'final_epsilon': agent.epsilon,
+            'num_episodes': episode + 1,
+            'actual_episodes_trained': episode + 1,
+            'num_environments_goals': len(training_envs_goals)
+        }, f)
+    
+    print(f"\nTraining completed. Final success rate: {final_success_rate:.2f}%")
+    
+    return rewards, run_dir

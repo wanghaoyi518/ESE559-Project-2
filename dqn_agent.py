@@ -44,7 +44,6 @@ class DQN(nn.Module):
                 nn.init.xavier_uniform_(m.weight)
                 nn.init.constant_(m.bias, 0.1)
 
-
 class DQNAgent:
     """
     Deep Q-Learning agent for robot navigation task.
@@ -462,20 +461,143 @@ class EnhancedDQNAgent(DQNAgent):
         # Store in memory
         self.memory.append((state_rep, action, reward, next_state_rep, done))
 
-# Example usage
-if __name__ == "__main__":
-    # Initialize agent
-    agent = DQNAgent()
+class GoalConditionedDQNAgent(EnhancedDQNAgent):
+    """
+    Goal-conditioned DQN agent for Problem 3 with environmental uncertainty and variable goals.
     
-    # Print information about the agent
-    print(f"Agent initialized on device: {agent.device}")
-    print(f"Policy network: {agent.policy_net}")
+    This agent extends the EnhancedDQNAgent to handle variable goal positions
+    and learn a goal-conditioned policy across different environments.
+    """
     
-    # Test forward pass
-    state = (0.0, 0.0, 0.0)
-    state_rep = agent.get_state_representation(state)
-    state_tensor = torch.FloatTensor(state_rep).unsqueeze(0).to(agent.device)
-    q_values = agent.policy_net(state_tensor)
+    def __init__(self, state_dim=14, action_dim=23, hidden_dim=128, 
+                 learning_rate=0.0005, gamma=0.99, epsilon=1.0, 
+                 epsilon_min=0.001, epsilon_decay=0.998, 
+                 target_update_freq=10, memory_size=100000, 
+                 device=None):
+        """Initialize the Goal-Conditioned DQN agent with correct state dimension."""
+        super().__init__(state_dim=state_dim, action_dim=action_dim, 
+                        hidden_dim=hidden_dim, learning_rate=learning_rate,
+                        gamma=gamma, epsilon=epsilon, epsilon_min=epsilon_min,
+                        epsilon_decay=epsilon_decay, target_update_freq=target_update_freq,
+                        memory_size=memory_size, device=device)
+        
+        # No fixed goal position as it will vary
+        self.goal_position = None
+
+    def get_goal_conditioned_state(self, state, obstacles, goal_position):
+        """
+        Create a goal-conditioned state representation that includes obstacle information
+        and the current goal position.
+        
+        Args:
+            state (tuple): Robot state (px, py, phi).
+            obstacles (list): List of obstacle dictionaries.
+            goal_position (tuple): Goal position (x_g, y_g).
+            
+        Returns:
+            numpy.ndarray: Goal-conditioned state representation.
+        """
+        # Extract basic state
+        px, py, phi = state
+        
+        # Get goal position
+        gx, gy = goal_position
+        
+        # Distance to goal
+        dist_to_goal = np.sqrt((px - gx)**2 + (py - gy)**2)
+        
+        # Angle to goal relative to current orientation
+        angle_to_goal = np.arctan2(gy - py, gx - px)
+        angle_diff = self.normalize_angle(angle_to_goal - phi)
+        
+        # Include goal position explicitly in the state
+        goal_features = [gx, gy]
+        
+        # Sort obstacles by distance to robot
+        sorted_obstacles = sorted(obstacles, key=lambda obs: 
+                                np.sqrt((px - obs['x'])**2 + (py - obs['y'])**2))
+        
+        # Calculate distance to nearest obstacle (accounting for obstacle radius)
+        if sorted_obstacles:
+            nearest_obs = sorted_obstacles[0]
+            nearest_obs_dist = np.sqrt((px - nearest_obs['x'])**2 + (py - nearest_obs['y'])**2) - nearest_obs['r']
+            nearest_obs_dist = max(0.01, nearest_obs_dist)  # Ensure it's not negative or zero
+        else:
+            nearest_obs_dist = 10.0  # Large value if no obstacles
+        
+        # Calculate distances and angles to the three obstacles
+        obstacle_features = []
+        
+        # Take the three obstacles (or fewer if there are less than 3)
+        for i in range(min(3, len(sorted_obstacles))):
+            obs = sorted_obstacles[i]
+            
+            # Distance to obstacle center
+            dist = np.sqrt((px - obs['x'])**2 + (py - obs['y'])**2)
+            
+            # Angle to obstacle relative to current orientation
+            angle = np.arctan2(obs['y'] - py, obs['x'] - px)
+            rel_angle = self.normalize_angle(angle - phi)
+            
+            obstacle_features.extend([dist, rel_angle])
+        
+        # Pad with zeros if fewer than 3 obstacles
+        while len(obstacle_features) < 6:  # 6 = 3 obstacles * 2 features (dist, angle)
+            obstacle_features.extend([10.0, 0.0])  # Large distance, zero angle
+        
+        # Combine all features: base state + goal position + goal-relative features + obstacle features
+        return np.array([px, py, phi] + goal_features + [dist_to_goal, angle_diff, nearest_obs_dist] + obstacle_features, 
+                        dtype=np.float32)
+
+    def select_action(self, state, obstacles, goal_position, epsilon=None):
+        """
+        Select an action using epsilon-greedy policy with goal conditioning.
+        
+        Args:
+            state (tuple): Robot state (px, py, phi).
+            obstacles (list): List of obstacle dictionaries.
+            goal_position (tuple): Goal position (x_g, y_g).
+            epsilon (float, optional): Override epsilon value for exploration.
+            
+        Returns:
+            int: Selected action index.
+        """
+        # Use instance epsilon if not provided
+        if epsilon is None:
+            epsilon = self.epsilon
+        
+        # With probability epsilon, select random action (exploration)
+        if random.random() < epsilon:
+            return random.randint(0, self.action_dim - 1)
+        
+        # Otherwise, select best action according to Q-network (exploitation)
+        state_rep = self.get_goal_conditioned_state(state, obstacles, goal_position)
+        state_tensor = torch.FloatTensor(state_rep).unsqueeze(0).to(self.device)
+        
+        # No gradient calculation needed for action selection
+        with torch.no_grad():
+            q_values = self.policy_net(state_tensor)
+            
+        # Return action with highest Q-value
+        return q_values.max(1)[1].item()
     
-    print(f"State representation: {state_rep}")
-    print(f"Q-values: {q_values}")
+    def remember(self, state, obstacles, action, reward, next_state, next_obstacles, done, goal_position):
+        """
+        Store experience in replay memory with goal and obstacle information.
+        
+        Args:
+            state (tuple): Current state (px, py, phi).
+            obstacles (list): Current obstacle configuration.
+            action (int): Action taken.
+            reward (float): Reward received.
+            next_state (tuple): Next state (px, py, phi).
+            next_obstacles (list): Next obstacle configuration (usually same as obstacles).
+            done (bool): Whether the episode is done.
+            goal_position (tuple): Goal position (x_g, y_g).
+        """
+        # Convert raw states to goal-conditioned representation
+        state_rep = self.get_goal_conditioned_state(state, obstacles, goal_position)
+        next_state_rep = self.get_goal_conditioned_state(next_state, next_obstacles, goal_position)
+        
+        # Store in memory
+        self.memory.append((state_rep, action, reward, next_state_rep, done))

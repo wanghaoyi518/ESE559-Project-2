@@ -16,8 +16,8 @@ def main():
     parser = argparse.ArgumentParser(description='DQN for Robot Navigation - ESE 559 Project 2')
     
     # Problem selection
-    parser.add_argument('--problem', type=int, default=1, choices=[1, 2], 
-                        help='Problem number to solve (1 or 2)')
+    parser.add_argument('--problem', type=int, default=1, choices=[1, 2, 3], 
+                        help='Problem number to solve (1, 2, or 3)')
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'test'], 
                         help='Mode: train or test')
     # General parameters
@@ -26,20 +26,20 @@ def main():
     parser.add_argument('--render', action='store_true', help='Render environment')
     
     # Training parameters
-    parser.add_argument('--episodes', type=int, default=5000, help='Number of training episodes')
-    parser.add_argument('--batch-size', type=int, default=64, help='Batch size for experience replay')
+    parser.add_argument('--episodes', type=int, default=8000, help='Number of training episodes')
+    parser.add_argument('--batch-size', type=int, default=128, help='Batch size for experience replay')
     parser.add_argument('--learning-rate', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--gamma', type=float, default=0.85, help='Discount factor')
     parser.add_argument('--epsilon', type=float, default=1.0, help='Initial exploration rate')
     parser.add_argument('--epsilon-min', type=float, default=0.001, help='Minimum exploration rate')
-    parser.add_argument('--epsilon-decay', type=float, default=0.99, help='Exploration decay rate')
-    parser.add_argument('--hidden-dim', type=int, default=128, help='Hidden dimension for DQN')
+    parser.add_argument('--epsilon-decay', type=float, default=0.95, help='Exploration decay rate')
+    parser.add_argument('--hidden-dim', type=int, default=64, help='Hidden dimension for DQN')
     parser.add_argument('--target-update-freq', type=int, default=10, help='Target network update frequency')
     parser.add_argument('--memory-size', type=int, default=100000, help='Size of replay memory')
     parser.add_argument('--save-freq', type=int, default=1000, help='Model saving frequency')
     parser.add_argument('--log-freq', type=int, default=100000, help='Logging frequency')
     parser.add_argument('--results-dir', type=str, default='results', help='Directory for saving results')
-    parser.add_argument('--additional-envs', type=int, default=27, help='Number of additional random environments for Problem 2')
+    parser.add_argument('--additional-envs', type=int, default=47, help='Number of additional random environments for Problem 2')
     
     # Testing parameters
     parser.add_argument('--model-path', type=str, default=None, help='Path to trained model for testing')
@@ -208,6 +208,86 @@ def main():
             
             # Test on random environments
             test_results = test_problem2(
+                agent=agent,
+                num_trials=args.num_trials,
+                max_steps=args.max_steps,
+                render=args.render,
+                output_dir=results_dir
+            )
+
+
+    # Add the following code block at the end of the main() function, after the problem 2 section
+    elif args.problem == 3:
+        # Problem 3: Multiple environments with variable goal locations
+        print(f"Running Problem 3: Multiple environments with variable goal locations")
+        
+        # Create agent for Problem 3
+        agent = GoalConditionedDQNAgent(
+            state_dim=14,  # Corrected state dimension
+            action_dim=23,  # 23 discrete actions
+            hidden_dim=args.hidden_dim,
+            learning_rate=args.learning_rate,
+            gamma=args.gamma,
+            epsilon=args.epsilon,
+            epsilon_min=args.epsilon_min,
+            epsilon_decay=args.epsilon_decay,
+            target_update_freq=args.target_update_freq,
+            memory_size=args.memory_size,
+            device=device
+        )
+        
+        if args.mode == 'train':
+            # Train agent for Problem 3
+            print(f"Starting training with {args.episodes} episodes on multiple environments with variable goals")
+            
+            # Train agent on multiple environments with variable goals
+            rewards, _ = train_problem3(
+                agent=agent,
+                num_episodes=args.episodes,
+                batch_size=args.batch_size,
+                save_freq=args.save_freq,
+                log_freq=args.log_freq,
+                render=args.render,
+                results_dir=results_dir,
+                update_target_freq=args.target_update_freq,
+                max_steps=args.max_steps,
+                additional_envs=args.additional_envs
+            )
+            
+            # After training, save the final model
+            final_model_path = os.path.join(results_dir, "dqn_model_final.pth")
+            agent.save(final_model_path)
+            
+            # Create evaluation directory
+            eval_dir = os.path.join(results_dir, "test_evaluation")
+            os.makedirs(eval_dir, exist_ok=True)
+            
+            # Test the trained agent on random environments and goals
+            print("\nEvaluating trained agent on random test environments and goals...")
+            test_results = test_problem3(
+                agent=agent,
+                num_trials=args.num_trials,
+                max_steps=args.max_steps,
+                render=args.render,
+                output_dir=eval_dir
+            )
+            
+        elif args.mode == 'test':
+            # Check if model path is provided
+            if args.model_path is None:
+                print("Error: Model path must be provided for testing mode")
+                return
+            
+            # Load trained model
+            success = agent.load(args.model_path)
+            if not success:
+                print(f"Error: Failed to load model from {args.model_path}")
+                return
+            
+            print(f"Loaded model from {args.model_path}")
+            
+            # Test on random environments and goals
+            test_results = test_problem3(
                 agent=agent,
                 num_trials=args.num_trials,
                 max_steps=args.max_steps,

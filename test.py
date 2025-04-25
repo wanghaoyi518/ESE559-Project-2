@@ -320,70 +320,203 @@ def test_problem2(agent, num_trials=10, max_steps=150, render=True, output_dir=N
     
     return results
 
-def main():
-    """Main function to parse arguments and start testing."""
-    parser = argparse.ArgumentParser(description='Test DQN agent for Problem 1.')
-    parser.add_argument('--model-path', type=str, required=True, help='Path to the trained model')
-    parser.add_argument('--num-trials', type=int, default=10, help='Number of trials')
-    parser.add_argument('--max-steps', type=int, default=150, help='Maximum steps per trial')
-    parser.add_argument('--render', action='store_true', help='Render test environments')
-    parser.add_argument('--output-dir', type=str, default='test_results', help='Directory to save results')
-    parser.add_argument('--seed', type=int, default=123, help='Random seed')
-    parser.add_argument('--no-cuda', action='store_true', help='Disable CUDA')
+def test_problem3(agent, num_trials=10, max_steps=150, render=True, output_dir=None):
+    """
+    Test agent according to Problem 3 requirements.
     
-    args = parser.parse_args()
+    Args:
+        agent (GoalConditionedDQNAgent): The trained goal-conditioned DQN agent.
+        num_trials (int): Number of trials to run per test environment-goal pair.
+        max_steps (int): Maximum steps per trial.
+        render (bool): Whether to render the environment.
+        output_dir (str): Directory to save results.
+        
+    Returns:
+        dict: Dictionary containing success rates and average steps for each test environment-goal pair.
+    """
+    # Create output directory if provided
+    if output_dir is not None:
+        os.makedirs(output_dir, exist_ok=True)
     
-    # Set random seed
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(args.seed)
+    # Generate test environments
+    test_envs = []
+    for i in range(3):  # Generate 3 test environments as specified
+        obstacles = Problem2Env.generate_random_test_environment()
+        test_envs.append(obstacles)
+        
+        # Visualize each test environment
+        if render:
+            env = Problem3Env(obstacles=obstacles)
+            fig = env.visualize(title=f"Test Environment {i+1}")
+            plt.savefig(os.path.join(output_dir, f"test_env{i+1}.png"))
+            plt.close(fig)
     
-    # Set device
-    device = torch.device("cpu" if args.no_cuda or not torch.cuda.is_available() else "cuda")
-    print(f"Using device: {device}")
+    # Generate test goals for each environment
+    test_env_goal_pairs = []
+    for env_idx, obstacles in enumerate(test_envs):
+        for goal_idx in range(3):  # Generate 3 test goals per environment
+            # Use the updated method that checks for obstacle conflicts
+            goal_pos = Problem3Env.generate_random_goal(obstacles=obstacles)
+            test_env_goal_pairs.append((env_idx, obstacles, goal_pos))
+            
+            # Visualize each environment-goal pair
+            if render:
+                env = Problem3Env(obstacles=obstacles, goal_position=goal_pos)
+                fig = env.visualize(title=f"Test Environment {env_idx+1}, Goal {goal_idx+1}: {goal_pos}")
+                plt.savefig(os.path.join(output_dir, f"test_env{env_idx+1}_goal{goal_idx+1}.png"))
+                plt.close(fig)
     
-    # Create output directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.join(args.output_dir, f"test_{timestamp}")
-    os.makedirs(output_dir, exist_ok=True)
+    # Initialize results tracking
+    results = {}
     
-    # Save test parameters
-    with open(os.path.join(output_dir, 'test_params.json'), 'w') as f:
-        json.dump(vars(args), f, indent=4)
-    
-    # Create agent
-    agent = DQNAgent(device=device)
-    
-    # Load trained model
-    agent.load(args.model_path)
-    print(f"Loaded model from {args.model_path}")
-    
-    # Start testing
-    print("\nStarting testing...")
-    start_time = time.time()
-    
-    # Test according to Problem 1 requirements
-    success_rate, avg_steps = test_problem1(
-        agent=agent,
-        num_trials=args.num_trials,
-        max_steps=args.max_steps,
-        render=args.render,
-        output_dir=output_dir
-    )
-    
-    # Save test results
-    with open(os.path.join(output_dir, 'test_results.json'), 'w') as f:
-        json.dump({
+    # Test on each environment-goal pair
+    for pair_idx, (env_idx, obstacles, goal_pos) in enumerate(test_env_goal_pairs):
+        print(f"\nTesting on environment {env_idx+1}, goal position {goal_pos}...")
+        
+        # Initialize tracking for this environment-goal pair
+        success_count = 0
+        total_steps = 0
+        successful_trials = 0
+        
+        # Initialize figure for visualization if rendering
+        if render:
+            fig, ax = plt.subplots(figsize=(10, 10))
+            
+            # Plot obstacles
+            for obs in obstacles:
+                circle = plt.Circle((obs['x'], obs['y']), obs['r'], color='red', alpha=0.5)
+                ax.add_patch(circle)
+            
+            # Plot goal
+            goal_circle = plt.Circle(goal_pos, 0.08, color='green', alpha=0.3)
+            ax.add_patch(goal_circle)
+            ax.plot(goal_pos[0], goal_pos[1], 'g*', markersize=15)
+            
+            # Set plot limits
+            ax.set_xlim([-1.5, 1.5])
+            ax.set_ylim([-1.5, 1.5])
+            ax.set_xlabel("X Position")
+            ax.set_ylabel("Y Position")
+            ax.grid(True)
+        
+        # Run trials
+        for trial in range(num_trials):
+            # Sample random initial state from the specified square area
+            px0 = np.random.uniform(-1.3, -1.2)
+            py0 = np.random.uniform(-1.3, -1.2)
+            phi0 = np.random.uniform(-np.pi, np.pi)
+            initial_state = (px0, py0, phi0)
+            
+            # Create environment
+            env = Problem3Env(obstacles=obstacles, goal_position=goal_pos, initial_state=initial_state)
+            
+            # Reset environment
+            state = env.reset()
+            done = False
+            step = 0
+            
+            # For rendering
+            trajectory = [state]
+            
+            # Run trial
+            while not done and step < max_steps:
+                # Select action (no exploration during testing)
+                action = agent.select_action(state, obstacles, goal_pos, epsilon=0)
+                
+                # Take action
+                next_state, reward, done = env.step(state, action)
+                
+                # Update state
+                state = next_state
+                
+                # Record trajectory for rendering
+                trajectory.append(state)
+                
+                # Update step counter
+                step += 1
+                
+                # Check if goal reached
+                if env.check_goal(state):
+                    success_count += 1
+                    total_steps += step
+                    successful_trials += 1
+                    break
+            
+            # Plot trajectory if rendering
+            if render:
+                xs = [s[0] for s in trajectory]
+                ys = [s[1] for s in trajectory]
+                
+                # Different color and transparency for each trajectory
+                color = plt.cm.jet(trial / num_trials)
+                ax.plot(xs, ys, color=color, alpha=0.7, linewidth=1.5)
+                
+                # Plot final position
+                if env.check_goal(trajectory[-1]):
+                    ax.plot(xs[-1], ys[-1], 'go', markersize=5)
+                else:
+                    ax.plot(xs[-1], ys[-1], 'ro', markersize=5)
+        
+        # Calculate success rate and average steps
+        success_rate = success_count / num_trials
+        avg_steps = total_steps / successful_trials if successful_trials > 0 else float('inf')
+        
+        # Save visualization if rendering
+        if render and output_dir:
+            title = f"Env {env_idx+1}, Goal ({goal_pos[0]:.2f}, {goal_pos[1]:.2f}) - Success: {success_rate:.2f}, Avg Steps: {avg_steps:.1f}"
+            ax.set_title(title)
+            plt.savefig(os.path.join(output_dir, f"test_env{env_idx+1}_goal{pair_idx % 3 + 1}_results.png"))
+            plt.close(fig)
+        
+        # Store results
+        pair_key = f"env{env_idx+1}_goal{pair_idx % 3 + 1}"
+        results[pair_key] = {
+            'env_idx': env_idx,
+            'goal_position': goal_pos,
             'success_rate': success_rate,
-            'avg_steps': float(avg_steps) if avg_steps != float('inf') else "inf"
-        }, f, indent=4)
+            'avg_steps': float(avg_steps) if avg_steps != float('inf') else "inf",
+            'success_count': success_count,
+            'total_trials': num_trials,
+            'successful_trials': successful_trials
+        }
+        
+        # Print results
+        print(f"  Success Rate: {success_rate:.2f}")
+        avg_steps_str = f"{avg_steps:.1f}" if avg_steps != float('inf') else "inf"
+        print(f"  Average Steps to Goal: {avg_steps_str}")
     
-    # Print total testing time
-    test_time = time.time() - start_time
-    print(f"\nTesting completed in {test_time:.2f} seconds")
+    # Calculate overall statistics
+    overall_success_count = sum(results[key]["success_count"] for key in results)
+    overall_total_trials = sum(results[key]["total_trials"] for key in results)
+    overall_successful_trials = sum(results[key]["successful_trials"] for key in results)
     
-    return success_rate, avg_steps
-
-if __name__ == "__main__":
-    main()
+    overall_success_rate = overall_success_count / overall_total_trials
+    
+    # Calculate overall average steps (handling "inf" cases)
+    total_steps_sum = 0
+    for key in results:
+        if results[key]["avg_steps"] != "inf":
+            total_steps_sum += results[key]["successful_trials"] * results[key]["avg_steps"]
+    
+    overall_avg_steps = total_steps_sum / overall_successful_trials if overall_successful_trials > 0 else float('inf')
+    
+    results['overall'] = {
+        'success_rate': overall_success_rate,
+        'avg_steps': float(overall_avg_steps) if overall_avg_steps != float('inf') else "inf",
+        'success_count': overall_success_count,
+        'total_trials': overall_total_trials,
+        'successful_trials': overall_successful_trials
+    }
+    
+    # Save results to file
+    if output_dir:
+        with open(os.path.join(output_dir, 'test_results.json'), 'w') as f:
+            json.dump(results, f, indent=4)
+    
+    # Print overall results
+    print("\nOverall Results:")
+    print(f"  Success Rate: {overall_success_rate:.2f}")
+    overall_avg_steps_str = f"{overall_avg_steps:.1f}" if overall_avg_steps != float('inf') else "inf"
+    print(f"  Average Steps to Goal: {overall_avg_steps_str}")
+    
+    return results

@@ -501,18 +501,57 @@ class Problem3Env(Problem2Env):
             self.goal_pos = goal_position
     
     @staticmethod
-    def generate_random_goal():
-        """Generate a random goal location based on the specified ranges for Problem 3."""
-        if np.random.random() < 0.5:
-            # First condition: x_g ∈ [0.8, 1] and y_g ∈ [0.8, 1]
-            x_g = np.random.uniform(0.8, 1.0)
-            y_g = np.random.uniform(0.8, 1.0)
-        else:
-            # Second condition: x_g ∈ [-1.1, -0.9] and y_g ∈ [0.8, 1]
-            x_g = np.random.uniform(-1.1, -0.9)
-            y_g = np.random.uniform(0.8, 1.0)
+    def generate_random_goal(obstacles=None, min_obstacle_distance=0.25):
+        """
+        Generate a random goal location based on the specified ranges for Problem 3.
+        Ensures the goal does not conflict with any obstacles.
         
-        return (x_g, y_g)
+        Args:
+            obstacles (list): List of obstacle dictionaries to check for conflicts.
+            min_obstacle_distance (float): Minimum allowed distance between goal and any obstacle.
+            
+        Returns:
+            tuple: Generated goal position (x_g, y_g).
+        """
+        if obstacles is None:
+            obstacles = []
+            
+        # Goal radius for collision checking
+        goal_radius = 0.08
+        
+        # Try up to 50 times to generate a valid goal
+        for _ in range(50):
+            if np.random.random() < 0.5:
+                # First condition: x_g ∈ [0.8, 1] and y_g ∈ [0.8, 1]
+                x_g = np.random.uniform(0.8, 1.0)
+                y_g = np.random.uniform(0.8, 1.0)
+            else:
+                # Second condition: x_g ∈ [-1.1, -0.9] and y_g ∈ [0.8, 1]
+                x_g = np.random.uniform(-1.1, -0.9)
+                y_g = np.random.uniform(0.8, 1.0)
+            
+            # Check if goal conflicts with any obstacle
+            valid_goal = True
+            for obs in obstacles:
+                # Calculate distance between goal and obstacle center
+                dist = np.sqrt((x_g - obs['x'])**2 + (y_g - obs['y'])**2)
+                
+                # Check if goal is too close to obstacle (considering both radii)
+                if dist < (obs['r'] + goal_radius + min_obstacle_distance):
+                    valid_goal = False
+                    break
+            
+            # If goal is valid, return it
+            if valid_goal:
+                return (x_g, y_g)
+        
+        # If we couldn't find a valid goal after several attempts,
+        # return a position that matches problem constraints but might be close to obstacles
+        # This is a fallback that should rarely be used
+        if np.random.random() < 0.5:
+            return (np.random.uniform(0.8, 1.0), np.random.uniform(0.8, 1.0))
+        else:
+            return (np.random.uniform(-1.1, -0.9), np.random.uniform(0.8, 1.0))
     
     @staticmethod
     def get_training_environments_with_goals(additional_envs=20):
@@ -554,7 +593,8 @@ class Problem3Env(Problem2Env):
         random_envs_goals = []
         for _ in range(additional_envs):
             obstacles = Problem2Env.generate_random_training_environment()
-            goal = Problem3Env.generate_random_goal()
+            # Generate a goal that doesn't conflict with the obstacles
+            goal = Problem3Env.generate_random_goal(obstacles=obstacles)
             random_envs_goals.append((obstacles, goal))
         
         # Combine predefined and random environments with goals
