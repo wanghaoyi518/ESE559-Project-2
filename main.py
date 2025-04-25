@@ -26,19 +26,20 @@ def main():
     parser.add_argument('--render', action='store_true', help='Render environment')
     
     # Training parameters
-    parser.add_argument('--episodes', type=int, default=3000, help='Number of training episodes')
+    parser.add_argument('--episodes', type=int, default=5000, help='Number of training episodes')
     parser.add_argument('--batch-size', type=int, default=64, help='Batch size for experience replay')
     parser.add_argument('--learning-rate', type=float, default=0.001, help='Learning rate')
-    parser.add_argument('--gamma', type=float, default=0.90, help='Discount factor')
+    parser.add_argument('--gamma', type=float, default=0.85, help='Discount factor')
     parser.add_argument('--epsilon', type=float, default=1.0, help='Initial exploration rate')
     parser.add_argument('--epsilon-min', type=float, default=0.001, help='Minimum exploration rate')
     parser.add_argument('--epsilon-decay', type=float, default=0.99, help='Exploration decay rate')
     parser.add_argument('--hidden-dim', type=int, default=128, help='Hidden dimension for DQN')
     parser.add_argument('--target-update-freq', type=int, default=10, help='Target network update frequency')
     parser.add_argument('--memory-size', type=int, default=100000, help='Size of replay memory')
-    parser.add_argument('--save-freq', type=int, default=100, help='Model saving frequency')
-    parser.add_argument('--log-freq', type=int, default=10, help='Logging frequency')
+    parser.add_argument('--save-freq', type=int, default=1000, help='Model saving frequency')
+    parser.add_argument('--log-freq', type=int, default=100000, help='Logging frequency')
     parser.add_argument('--results-dir', type=str, default='results', help='Directory for saving results')
+    parser.add_argument('--additional-envs', type=int, default=27, help='Number of additional random environments for Problem 2')
     
     # Testing parameters
     parser.add_argument('--model-path', type=str, default=None, help='Path to trained model for testing')
@@ -82,15 +83,17 @@ def main():
             # Train agent for Problem 1
             print(f"Starting training with {args.episodes} episodes")
             
-            # Train agent
-            rewards = train(
+            # Train agent (pass all relevant parameters)
+            rewards, _ = train(
                 agent=agent,
                 num_episodes=args.episodes,
                 batch_size=args.batch_size,
                 save_freq=args.save_freq,
                 log_freq=args.log_freq,
                 render=args.render,
-                results_dir=results_dir
+                results_dir=results_dir,
+                update_target_freq=args.target_update_freq,
+                max_steps=args.max_steps
             )
             
             # After training, save the final model
@@ -140,7 +143,7 @@ def main():
         
         # Create agent for Problem 2
         agent = EnhancedDQNAgent(
-            state_dim=11,  # Enhanced state including obstacle information
+            state_dim=12,  # Enhanced state including obstacle information
             action_dim=23,  # 23 discrete actions
             hidden_dim=args.hidden_dim,
             learning_rate=args.learning_rate,
@@ -167,7 +170,8 @@ def main():
                 render=args.render,
                 results_dir=results_dir,
                 update_target_freq=args.target_update_freq,
-                max_steps=args.max_steps
+                max_steps=args.max_steps,
+                additional_envs=args.additional_envs  # Pass the parameter here
             )
             
             # After training, save the final model

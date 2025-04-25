@@ -223,7 +223,7 @@ class RobotEnv:
     
         # Goal reward
         if reached_goal:
-            reward = 20.0
+            reward = 30.0
             return reward, True
         
         # Penalize staying still (action index 22 is (0,0))
@@ -312,9 +312,19 @@ class Problem2Env(RobotEnv):
         self.goal_pos = goal_position
     
     @staticmethod
-    def get_training_environments():
-        """Return the predefined training environments for Problem 2."""
-        return [
+    def get_training_environments(additional_envs=20):
+        """
+        Return training environments for Problem 2 with additional random environments.
+        
+        Args:
+            additional_envs (int): Number of additional random environments to generate
+                                   beyond the predefined ones.
+        
+        Returns:
+            list: List of obstacle configurations for training.
+        """
+        # Predefined environments from the problem statement
+        predefined_envs = [
             # Case 1
             [
                 {'x': -0.4, 'y': -0.4, 'r': 0.16},
@@ -334,6 +344,77 @@ class Problem2Env(RobotEnv):
                 {'x': 1.0, 'y': -0.6, 'r': 0.17}
             ]
         ]
+        
+        # Generate additional random environments
+        random_envs = []
+        for _ in range(additional_envs):
+            random_envs.append(Problem2Env.generate_random_training_environment())
+        
+        # Combine predefined and random environments
+        all_environments = predefined_envs + random_envs
+        
+        print(f"Created {len(all_environments)} training environments "
+              f"({len(predefined_envs)} predefined, {len(random_envs)} random)")
+        
+        return all_environments
+    
+    @staticmethod
+    def generate_random_training_environment(num_obstacles=3):
+        """
+        Generate a random environment for training with diverse obstacle configurations.
+        
+        This method creates more diverse configurations than test environments
+        to improve generalization.
+        
+        Args:
+            num_obstacles (int): Number of obstacles to generate.
+            
+        Returns:
+            list: List of obstacle dictionaries.
+        """
+        obstacles = []
+        
+        # Minimum distance between obstacles (smaller than in test environments
+        # to create more challenging scenarios)
+        min_distance = 0.3
+        
+        # Obstacle placement patterns to ensure diversity
+        placement_pattern = 'random'  # Options: 'random', 'grid', 'clustered'
+        
+        if placement_pattern == 'random':
+            # Fully random placement
+            for _ in range(num_obstacles):
+                valid_position = False
+                attempts = 0
+                
+                while not valid_position and attempts < 50:
+                    attempts += 1
+                    
+                    # Generate random position
+                    x = np.random.uniform(-1.0, 1.0)
+                    y = np.random.uniform(-1.0, 1.0)
+                    
+                    # Generate random radius from specified range
+                    r = np.random.uniform(0.16, 0.20)
+                    
+                    # Check distance to other obstacles
+                    valid_position = True
+                    for obs in obstacles:
+                        dist = np.sqrt((x - obs['x'])**2 + (y - obs['y'])**2)
+                        if dist < (r + obs['r'] + min_distance):
+                            valid_position = False
+                            break
+                    
+                    # Check distance to goal and initial position
+                    goal_dist = np.sqrt((x - 1.2)**2 + (y - 1.2)**2)
+                    init_dist = np.sqrt((x + 1.2)**2 + (y + 1.2)**2)
+                    
+                    if goal_dist < (r + 0.25) or init_dist < (r + 0.25):
+                        valid_position = False
+                
+                if valid_position:
+                    obstacles.append({'x': x, 'y': y, 'r': r})
+        return obstacles       
         
     @staticmethod
     def generate_random_test_environment(num_obstacles=3):
@@ -406,11 +487,113 @@ class Problem2Env(RobotEnv):
         plt.tight_layout()
         return fig
 
-# Example usage
-if __name__ == "__main__":
-    # Create the environment
-    env = RobotEnv()
+class Problem3Env(Problem2Env):
+    """Environment class for Problem 3 with multiple training environments and variable goal locations."""
     
-    # Visualize environment
-    fig = env.visualize(title="Problem 1 Environment")
-    plt.show()
+    def __init__(self, obstacles=None, goal_position=None, initial_state=(-1.2, -1.2, 0)):
+        """Initialize environment with custom obstacles and goal configuration."""
+        super().__init__(initial_state=initial_state)
+        
+        if obstacles is not None:
+            self.obstacles = obstacles
+        
+        if goal_position is not None:
+            self.goal_pos = goal_position
+    
+    @staticmethod
+    def generate_random_goal():
+        """Generate a random goal location based on the specified ranges for Problem 3."""
+        if np.random.random() < 0.5:
+            # First condition: x_g ∈ [0.8, 1] and y_g ∈ [0.8, 1]
+            x_g = np.random.uniform(0.8, 1.0)
+            y_g = np.random.uniform(0.8, 1.0)
+        else:
+            # Second condition: x_g ∈ [-1.1, -0.9] and y_g ∈ [0.8, 1]
+            x_g = np.random.uniform(-1.1, -0.9)
+            y_g = np.random.uniform(0.8, 1.0)
+        
+        return (x_g, y_g)
+    
+    @staticmethod
+    def get_training_environments_with_goals(additional_envs=20):
+        """
+        Return training environments and goals for Problem 3.
+        
+        Args:
+            additional_envs (int): Number of additional random environments to generate
+                                   beyond the predefined ones.
+        
+        Returns:
+            list: List of (obstacle configuration, goal position) pairs for training.
+        """
+        # Predefined environments and goals from the problem statement
+        predefined_envs_goals = [
+            # Case 1
+            ([
+                {'x': -0.4, 'y': -0.4, 'r': 0.16},
+                {'x': 0.1, 'y': -0.4, 'r': 0.16},
+                {'x': -0.4, 'y': 0.1, 'r': 0.17}
+            ], (0.9, 0.9)),
+            
+            # Case 2
+            ([
+                {'x': -0.8, 'y': -0.4, 'r': 0.16},
+                {'x': -0.1, 'y': -0.4, 'r': 0.17},
+                {'x': 0.5, 'y': -0.4, 'r': 0.17}
+            ], (0.82, 0.95)),
+            
+            # Case 3
+            ([
+                {'x': -0.6, 'y': 1.0, 'r': 0.17},
+                {'x': -0.6, 'y': -1.0, 'r': 0.16},
+                {'x': 1.0, 'y': -0.6, 'r': 0.17}
+            ], (-1.0, 0.9))
+        ]
+        
+        # Generate additional random environments with random goals
+        random_envs_goals = []
+        for _ in range(additional_envs):
+            obstacles = Problem2Env.generate_random_training_environment()
+            goal = Problem3Env.generate_random_goal()
+            random_envs_goals.append((obstacles, goal))
+        
+        # Combine predefined and random environments with goals
+        all_environments_goals = predefined_envs_goals + random_envs_goals
+        
+        print(f"Created {len(all_environments_goals)} training environments with goals "
+              f"({len(predefined_envs_goals)} predefined, {len(random_envs_goals)} random)")
+        
+        return all_environments_goals
+        
+    def visualize_environments_with_goals(self, env_goal_pairs, title="Training Environments and Goals"):
+        """Visualize multiple environments with their goals in a single figure."""
+        rows = int(np.ceil(len(env_goal_pairs) / 2))
+        fig, axes = plt.subplots(rows, 2, figsize=(15, 5*rows))
+        axes = axes.flatten()
+        
+        for i, (obstacles, goal_pos) in enumerate(env_goal_pairs):
+            if i < len(axes):
+                ax = axes[i]
+                
+                # Plot obstacles
+                for obs in obstacles:
+                    circle = plt.Circle((obs['x'], obs['y']), obs['r'], color='red', alpha=0.5)
+                    ax.add_patch(circle)
+                
+                # Plot goal
+                goal_circle = plt.Circle(goal_pos, self.goal_radius, color='green', alpha=0.3)
+                ax.add_patch(goal_circle)
+                ax.plot(goal_pos[0], goal_pos[1], 'g*', markersize=10)
+                
+                # Plot initial position area
+                rect = plt.Rectangle((-1.3, -1.3), 0.1, 0.1, color='blue', alpha=0.3)
+                ax.add_patch(rect)
+                
+                ax.set_xlim([self.state_space['x_min'] - 0.2, self.state_space['x_max'] + 0.2])
+                ax.set_ylim([self.state_space['y_min'] - 0.2, self.state_space['y_max'] + 0.2])
+                ax.set_title(f"Environment-Goal {i+1}")
+                ax.grid(True)
+        
+        fig.suptitle(title, fontsize=16)
+        plt.tight_layout()
+        return fig

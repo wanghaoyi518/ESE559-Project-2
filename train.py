@@ -8,6 +8,7 @@ import argparse
 import time
 import json
 from datetime import datetime
+from collections import deque
 
 from environment import *
 from dqn_agent import DQNAgent
@@ -82,6 +83,35 @@ def train(agent, num_episodes=2000, batch_size=64,
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = os.path.join(results_dir, f"run_{timestamp}")
     os.makedirs(run_dir, exist_ok=True)
+    
+    # Save training parameters to JSON file for reproducibility
+    training_params = {
+        'problem_type': 'Problem 1',
+        'num_episodes': num_episodes,
+        'batch_size': batch_size,
+        'save_freq': save_freq,
+        'log_freq': log_freq,
+        'render': render,
+        'update_target_freq': update_target_freq,
+        'max_steps': max_steps,
+        'agent_config': {
+            'state_dim': agent.state_dim,
+            'action_dim': agent.action_dim,
+            'hidden_dim': agent.hidden_dim,
+            'learning_rate': agent.learning_rate,
+            'gamma': agent.gamma,
+            'epsilon': agent.epsilon,
+            'epsilon_min': agent.epsilon_min,
+            'epsilon_decay': agent.epsilon_decay,
+            'memory_size': agent.memory_size,
+            'device': str(agent.device)
+        },
+        'timestamp': timestamp,
+        'start_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    with open(os.path.join(run_dir, 'training_parameters.json'), 'w') as f:
+        json.dump(training_params, f, indent=4)
     
     # Initialize list to store rewards
     rewards = []
@@ -227,9 +257,9 @@ def train(agent, num_episodes=2000, batch_size=64,
 
 def train_problem2(agent, num_episodes=2000, batch_size=64, 
                   save_freq=100, log_freq=10, render=False, results_dir='results',
-                  update_target_freq=10, max_steps=150):
+                  update_target_freq=10, max_steps=150, additional_envs=20):
     """
-    Train the DQN agent for Problem 2 with multiple environments.
+    Train the DQN agent for Problem 2 with multiple environments including random ones.
     
     Args:
         agent (EnhancedDQNAgent): The enhanced DQN agent to train.
@@ -241,6 +271,7 @@ def train_problem2(agent, num_episodes=2000, batch_size=64,
         results_dir (str): Directory to save results.
         update_target_freq (int): Number of episodes after which to update target network.
         max_steps (int): Maximum steps per episode.
+        additional_envs (int): Number of additional random environments to generate.
         
     Returns:
         tuple: (rewards, run_dir) - List of rewards and the directory where results are saved.
@@ -251,18 +282,75 @@ def train_problem2(agent, num_episodes=2000, batch_size=64,
     run_dir = os.path.join(results_dir, f"run_{timestamp}")
     os.makedirs(run_dir, exist_ok=True)
     
+    # Save training parameters to JSON file for reproducibility
+    training_params = {
+        'problem_type': 'Problem 2',
+        'num_episodes': num_episodes,
+        'batch_size': batch_size,
+        'save_freq': save_freq,
+        'log_freq': log_freq,
+        'render': render,
+        'update_target_freq': update_target_freq,
+        'max_steps': max_steps,
+        'additional_envs': additional_envs,
+        'total_environments': 3 + additional_envs,  # 3 predefined + additional random envs
+        'agent_config': {
+            'state_dim': agent.state_dim,
+            'action_dim': agent.action_dim,
+            'hidden_dim': agent.hidden_dim,
+            'learning_rate': agent.learning_rate,
+            'gamma': agent.gamma,
+            'epsilon': agent.epsilon,
+            'epsilon_min': agent.epsilon_min,
+            'epsilon_decay': agent.epsilon_decay,
+            'memory_size': agent.memory_size,
+            'device': str(agent.device)
+        },
+        'timestamp': timestamp,
+        'start_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    with open(os.path.join(run_dir, 'training_parameters.json'), 'w') as f:
+        json.dump(training_params, f, indent=4)
+    
     # Initialize tracking
     rewards = []
     success_rates = []
     epsilons = []
+    env_success_tracking = {}  # Track success by environment
     
-    # Get training environments
-    training_envs = Problem2Env.get_training_environments()
+    # Get training environments with additional random ones
+    training_envs = Problem2Env.get_training_environments(additional_envs=additional_envs)
     
-    # Visualize training environments
+    # Create a directory for environment visualizations
+    env_viz_dir = os.path.join(run_dir, "environments")
+    os.makedirs(env_viz_dir, exist_ok=True)
+    
+    # Visualize each training environment
+    for i, obstacles in enumerate(training_envs):
+        env = Problem2Env(obstacles=obstacles)
+        if i < 3:
+            title = f"Predefined Environment {i+1}"
+        else:
+            title = f"Random Environment {i-2}"
+            
+        fig = env.visualize(title=title)
+        plt.savefig(os.path.join(env_viz_dir, f"env_{i+1}.png"))
+        plt.close(fig)
+        
+        # Initialize environment success tracking
+        env_success_tracking[i] = {
+            'attempts': 0,
+            'successes': 0,
+            'last_100_attempts': deque(maxlen=100),
+            'success_rate': 0.0
+        }
+    
+    # Create a grid visualization of all environments
     env = Problem2Env()
-    fig = env.visualize_environments(training_envs, "Training Environments")
-    plt.savefig(os.path.join(run_dir, "training_environments.png"))
+    fig = env.visualize_environments(training_envs[:min(len(training_envs), 20)], 
+                                   "Sample of Training Environments")
+    plt.savefig(os.path.join(run_dir, "training_environments_sample.png"))
     plt.close(fig)
     
     # Progress bar
@@ -327,6 +415,15 @@ def train_problem2(agent, num_episodes=2000, batch_size=64,
         success = env.check_goal(state)
         success_rates.append(1 if success else 0)
         
+        # Update environment-specific success tracking
+        env_success_tracking[env_idx]['attempts'] += 1
+        env_success_tracking[env_idx]['successes'] += 1 if success else 0
+        env_success_tracking[env_idx]['last_100_attempts'].append(1 if success else 0)
+        env_success_tracking[env_idx]['success_rate'] = (
+            sum(env_success_tracking[env_idx]['last_100_attempts']) / 
+            len(env_success_tracking[env_idx]['last_100_attempts'])
+        )
+        
         # Update progress bar
         recent_success_rate = np.mean(success_rates[-min(100, len(success_rates)):]) * 100
         pbar.set_postfix({
@@ -334,7 +431,7 @@ def train_problem2(agent, num_episodes=2000, batch_size=64,
             'epsilon': f"{agent.epsilon:.4f}",
             'step': step,
             'success': f"{recent_success_rate:.1f}%",
-            'env': f"{env_idx+1}"
+            'env': f"{env_idx+1}/{len(training_envs)}"
         })
         
         # Save model and plots periodically
@@ -347,6 +444,21 @@ def train_problem2(agent, num_episodes=2000, batch_size=64,
             # Save rewards to file
             with open(os.path.join(run_dir, 'rewards.json'), 'w') as f:
                 json.dump(rewards, f)
+                
+            # Plot environment-specific success rates
+            plt.figure(figsize=(12, 6))
+            env_indices = sorted(list(env_success_tracking.keys()))
+            success_rates_by_env = [env_success_tracking[i]['success_rate'] for i in env_indices]
+            
+            plt.bar(range(len(env_indices)), success_rates_by_env)
+            plt.xlabel('Environment Index')
+            plt.ylabel('Success Rate (last 100 attempts)')
+            plt.title(f'Success Rate by Environment (Episode {episode})')
+            plt.xticks(range(len(env_indices)), [str(i+1) for i in env_indices])
+            plt.grid(True, axis='y')
+            plt.tight_layout()
+            plt.savefig(os.path.join(run_dir, f'env_success_rates_ep{episode}.png'))
+            plt.close()
         
         # Render environment and trajectory periodically
         if render and episode % log_freq == 0:
@@ -356,19 +468,47 @@ def train_problem2(agent, num_episodes=2000, batch_size=64,
             plt.close(fig)
         
         # Early stopping if consistently successful across all environments
-        if len(success_rates) >= 300 and np.mean(success_rates[-300:]) > 0.95:
-            print(f"\nEarly stopping at episode {episode}: Success rate above 95% for 300 episodes")
-            break
+        if episode >= 1000 and episode % 100 == 0:
+            # Check if the agent has a high success rate across all environments
+            env_success_rates = [data['success_rate'] for data in env_success_tracking.values() 
+                               if len(data['last_100_attempts']) >= 20]  # Only check environments with sufficient attempts
+            
+            if env_success_rates and np.mean(env_success_rates) > 0.9 and min(env_success_rates) > 0.7:
+                print(f"\nEarly stopping at episode {episode}: High success rates across all environments")
+                print(f"Average: {np.mean(env_success_rates):.2f}, Min: {min(env_success_rates):.2f}")
+                break
     
     # Save final model
     agent.save(os.path.join(run_dir, "dqn_model_final.pth"))
     
-    # Plot final rewards
-    plot_rewards(rewards, filename=os.path.join(run_dir, 'training_rewards_final.png'))
+    # Save final environment success rates
+    env_success_data = {}
+    for env_idx, data in env_success_tracking.items():
+        env_success_data[f"env_{env_idx+1}"] = {
+            'attempts': data['attempts'],
+            'successes': data['successes'],
+            'success_rate': data['success_rate'] if len(data['last_100_attempts']) > 0 else 0.0
+        }
     
-    # Save final rewards to file
-    with open(os.path.join(run_dir, 'rewards_final.json'), 'w') as f:
-        json.dump(rewards, f)
+    with open(os.path.join(run_dir, 'environment_success_rates.json'), 'w') as f:
+        json.dump(env_success_data, f, indent=4)
+    
+    # Plot final environment success rates
+    plt.figure(figsize=(12, 6))
+    env_indices = sorted(list(env_success_tracking.keys()))
+    success_rates_by_env = [env_success_tracking[i]['success_rate'] 
+                           if len(env_success_tracking[i]['last_100_attempts']) > 0 else 0.0 
+                           for i in env_indices]
+    
+    plt.bar(range(len(env_indices)), success_rates_by_env)
+    plt.xlabel('Environment Index')
+    plt.ylabel('Success Rate (last 100 attempts)')
+    plt.title(f'Final Success Rate by Environment')
+    plt.xticks(range(len(env_indices)), [str(i+1) for i in env_indices], rotation=90)
+    plt.grid(True, axis='y')
+    plt.tight_layout()
+    plt.savefig(os.path.join(run_dir, f'final_env_success_rates.png'))
+    plt.close()
     
     # Calculate and save final success rate
     final_success_rate = np.mean(success_rates[-min(300, len(success_rates))]) * 100
@@ -377,79 +517,10 @@ def train_problem2(agent, num_episodes=2000, batch_size=64,
             'final_success_rate': final_success_rate,
             'final_epsilon': agent.epsilon,
             'num_episodes': episode + 1,
-            'actual_episodes_trained': episode + 1
+            'actual_episodes_trained': episode + 1,
+            'num_environments': len(training_envs)
         }, f)
     
     print(f"\nTraining completed. Final success rate: {final_success_rate:.2f}%")
     
     return rewards, run_dir
-
-def main():
-    """Main function to parse arguments and start training."""
-    parser = argparse.ArgumentParser(description='Train DQN agent for robot navigation (Problem 1).')
-    parser.add_argument('--episodes', type=int, default=2000, help='Number of episodes')
-    parser.add_argument('--batch-size', type=int, default=64, help='Batch size for experience replay')
-    parser.add_argument('--learning-rate', type=float, default=0.001, help='Learning rate')
-    parser.add_argument('--gamma', type=float, default=0.99, help='Discount factor')
-    parser.add_argument('--epsilon', type=float, default=1.0, help='Initial exploration rate')
-    parser.add_argument('--epsilon-min', type=float, default=0.001, help='Minimum exploration rate')
-    parser.add_argument('--epsilon-decay', type=float, default=0.99, help='Exploration decay rate')
-    parser.add_argument('--hidden-dim', type=int, default=128, help='Hidden dimension of DQN')
-    parser.add_argument('--target-update-freq', type=int, default=10, help='Target network update frequency (episodes)')
-    parser.add_argument('--memory-size', type=int, default=100000, help='Size of replay memory')
-    parser.add_argument('--save-freq', type=int, default=100, help='Model saving frequency')
-    parser.add_argument('--log-freq', type=int, default=10, help='Logging frequency')
-    parser.add_argument('--render', action='store_true', help='Render environment during training')
-    parser.add_argument('--results-dir', type=str, default='results', help='Directory to save results')
-    parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--no-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('--max-steps', type=int, default=150, help='Maximum steps per episode')
-    
-    args = parser.parse_args()
-    
-    # Set random seed
-    set_seed(args.seed)
-    
-    # Set device
-    device = torch.device("cpu" if args.no_cuda or not torch.cuda.is_available() else "cuda")
-    print(f"Using device: {device}")
-    
-    # Create agent
-    agent = DQNAgent(
-        state_dim=3,  # [px, py, phi]
-        action_dim=23,  # 23 discrete actions
-        hidden_dim=args.hidden_dim,
-        learning_rate=args.learning_rate,
-        gamma=args.gamma,
-        epsilon=args.epsilon,
-        epsilon_min=args.epsilon_min,
-        epsilon_decay=args.epsilon_decay,
-        target_update_freq=args.target_update_freq,
-        memory_size=args.memory_size,
-        device=device
-    )
-    
-    # Print training setup
-    print(f"Starting training with {args.episodes} episodes")
-    
-    # Start training
-    start_time = time.time()
-    rewards, run_dir = train(
-        agent=agent,
-        num_episodes=args.episodes,
-        batch_size=args.batch_size,
-        save_freq=args.save_freq,
-        log_freq=args.log_freq,
-        render=args.render,
-        results_dir=args.results_dir,
-        update_target_freq=args.target_update_freq,
-        max_steps=args.max_steps
-    )
-    
-    # Print training time
-    training_time = time.time() - start_time
-    print(f"Training completed in {training_time:.2f} seconds")
-    print(f"Results saved in: {run_dir}")
-
-if __name__ == "__main__":
-    main()
