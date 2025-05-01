@@ -26,7 +26,7 @@ def main():
     parser.add_argument('--render', action='store_true', help='Render environment')
     
     # Training parameters
-    parser.add_argument('--episodes', type=int, default=8000, help='Number of training episodes')
+    parser.add_argument('--episodes', type=int, default=5000, help='Number of training episodes')
     parser.add_argument('--batch-size', type=int, default=128, help='Batch size for experience replay')
     parser.add_argument('--learning-rate', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--gamma', type=float, default=0.85, help='Discount factor')
@@ -39,12 +39,16 @@ def main():
     parser.add_argument('--save-freq', type=int, default=1000, help='Model saving frequency')
     parser.add_argument('--log-freq', type=int, default=100000, help='Logging frequency')
     parser.add_argument('--results-dir', type=str, default='results', help='Directory for saving results')
-    parser.add_argument('--additional-envs', type=int, default=47, help='Number of additional random environments for Problem 2')
+    parser.add_argument('--additional-envs', type=int, default=27, help='Number of additional random environments for Problem 2')
+    parser.add_argument('--hard-test-envs', type=int, default=20, 
+                        help='Number of environments hard test cases to generate')
     
     # Testing parameters
     parser.add_argument('--model-path', type=str, default=None, help='Path to trained model for testing')
     parser.add_argument('--num-trials', type=int, default=10, help='Number of trials for testing')
     parser.add_argument('--max-steps', type=int, default=150, help='Maximum steps per trial')
+    parser.add_argument('--test-released-cases', action='store_true', 
+                        help='Test on released test cases from test_case.py')
     
     args = parser.parse_args()
     
@@ -159,6 +163,7 @@ def main():
         if args.mode == 'train':
             # Train agent for Problem 2
             print(f"Starting training with {args.episodes} episodes on multiple environments")
+            print(f"Including {args.hard_test_envs} environments hard test cases")
             
             # Train agent on multiple environments
             rewards, _ = train_problem2(
@@ -171,7 +176,8 @@ def main():
                 results_dir=results_dir,
                 update_target_freq=args.target_update_freq,
                 max_steps=args.max_steps,
-                additional_envs=args.additional_envs  # Pass the parameter here
+                additional_envs=args.additional_envs,
+                hard_test_envs=args.hard_test_envs  # Pass the parameter here
             )
             
             # After training, save the final model
@@ -239,6 +245,7 @@ def main():
         if args.mode == 'train':
             # Train agent for Problem 3
             print(f"Starting training with {args.episodes} episodes on multiple environments with variable goals")
+            print(f"Including {args.hard_test_envs} environments hard test cases")
             
             # Train agent on multiple environments with variable goals
             rewards, _ = train_problem3(
@@ -251,7 +258,8 @@ def main():
                 results_dir=results_dir,
                 update_target_freq=args.target_update_freq,
                 max_steps=args.max_steps,
-                additional_envs=args.additional_envs
+                additional_envs=args.additional_envs,
+                hard_test_envs=args.hard_test_envs  # Pass the parameter here
             )
             
             # After training, save the final model

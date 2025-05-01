@@ -11,6 +11,14 @@ import time
 from environment import *
 from dqn_agent import DQNAgent
 
+# Import the test cases from test_case.py
+try:
+    from test_case import problem2_test, problem3_test1, problem3_test_2
+    HAS_TEST_CASES = True
+except ImportError:
+    HAS_TEST_CASES = False
+    print("Warning: test_case.py not found. Will not use released test cases.")
+
 def test_problem1(agent, num_trials=10, max_steps=150, render=True, output_dir=None):
     """
     Test agent according to Problem 1 requirements.
@@ -68,7 +76,7 @@ def test_problem1(agent, num_trials=10, max_steps=150, render=True, output_dir=N
         initial_state = (px0, py0, phi0)
         
         # Create environment
-        env = RobotEnv(initial_state)
+        env = RobotEnv(initial_state=initial_state)
         
         # Reset environment
         state = env.reset()
@@ -155,15 +163,34 @@ def test_problem2(agent, num_trials=10, max_steps=150, render=True, output_dir=N
     
     # Generate test environments
     test_envs = []
-    for i in range(3):  # Generate 3 test environments as specified
+    
+    # Add 3 random test environments
+    for i in range(3):
         obstacles = Problem2Env.generate_random_test_environment()
         test_envs.append(obstacles)
         
         # Visualize each test environment
         if render:
             env = Problem2Env(obstacles=obstacles)
-            fig = env.visualize(title=f"Test Environment {i+1}")
-            plt.savefig(os.path.join(output_dir, f"test_env{i+1}.png"))
+            fig = env.visualize(title=f"Random Test Environment {i+1}")
+            plt.savefig(os.path.join(output_dir, f"random_test_env{i+1}.png"))
+            plt.close(fig)
+    
+    # Add the released test environment if available
+    if HAS_TEST_CASES:
+        # Convert the dictionary format to list format
+        released_obstacles = [
+            {'x': problem2_test['O1']['x'], 'y': problem2_test['O1']['y'], 'r': problem2_test['O1']['r']},
+            {'x': problem2_test['O2']['x'], 'y': problem2_test['O2']['y'], 'r': problem2_test['O2']['r']},
+            {'x': problem2_test['O3']['x'], 'y': problem2_test['O3']['y'], 'r': problem2_test['O3']['r']}
+        ]
+        test_envs.append(released_obstacles)
+        
+        # Visualize released test environment
+        if render:
+            env = Problem2Env(obstacles=released_obstacles)
+            fig = env.visualize(title="Released Test Environment")
+            plt.savefig(os.path.join(output_dir, "released_test_env.png"))
             plt.close(fig)
     
     # Initialize results tracking
@@ -171,7 +198,8 @@ def test_problem2(agent, num_trials=10, max_steps=150, render=True, output_dir=N
     
     # Test on each environment
     for env_idx, obstacles in enumerate(test_envs):
-        print(f"\nTesting on environment {env_idx+1}...")
+        env_name = f"released_env" if (HAS_TEST_CASES and env_idx == len(test_envs) - 1) else f"random_env{env_idx+1}"
+        print(f"\nTesting on {env_name}...")
         
         # Initialize tracking for this environment
         success_count = 0
@@ -264,13 +292,13 @@ def test_problem2(agent, num_trials=10, max_steps=150, render=True, output_dir=N
         
         # Save visualization if rendering
         if render and output_dir:
-            title = f"Test Environment {env_idx+1} - Success Rate: {success_rate:.2f}, Avg Steps: {avg_steps:.1f}"
+            title = f"{env_name} - Success Rate: {success_rate:.2f}, Avg Steps: {avg_steps:.1f}"
             ax.set_title(title)
-            plt.savefig(os.path.join(output_dir, f"test_env{env_idx+1}_results.png"))
+            plt.savefig(os.path.join(output_dir, f"{env_name}_results.png"))
             plt.close(fig)
         
         # Store results
-        results[f"env{env_idx+1}"] = {
+        results[env_name] = {
             'success_rate': success_rate,
             'avg_steps': float(avg_steps) if avg_steps != float('inf') else "inf",
             'success_count': success_count,
@@ -284,18 +312,17 @@ def test_problem2(agent, num_trials=10, max_steps=150, render=True, output_dir=N
         print(f"  Average Steps to Goal: {avg_steps_str}")
     
     # Calculate overall statistics
-    overall_success_count = sum(results[f"env{i+1}"]["success_count"] for i in range(3))
-    overall_total_trials = sum(results[f"env{i+1}"]["total_trials"] for i in range(3))
-    overall_successful_trials = sum(results[f"env{i+1}"]["successful_trials"] for i in range(3))
+    overall_success_count = sum(results[env]['success_count'] for env in results.keys())
+    overall_total_trials = sum(results[env]['total_trials'] for env in results.keys())
+    overall_successful_trials = sum(results[env]['successful_trials'] for env in results.keys())
     
     overall_success_rate = overall_success_count / overall_total_trials
     
     # Calculate overall average steps (handling "inf" cases)
     total_steps_sum = 0
-    for i in range(3):
-        env_key = f"env{i+1}"
-        if results[env_key]["avg_steps"] != "inf":
-            total_steps_sum += results[env_key]["successful_trials"] * results[env_key]["avg_steps"]
+    for env in results.keys():
+        if results[env]["avg_steps"] != "inf":
+            total_steps_sum += results[env]["successful_trials"] * results[env]["avg_steps"]
     
     overall_avg_steps = total_steps_sum / overall_successful_trials if overall_successful_trials > 0 else float('inf')
     
@@ -340,38 +367,91 @@ def test_problem3(agent, num_trials=10, max_steps=150, render=True, output_dir=N
     
     # Generate test environments
     test_envs = []
-    for i in range(3):  # Generate 3 test environments as specified
+    # Generate 3 random test environments
+    for i in range(3):
         obstacles = Problem2Env.generate_random_test_environment()
         test_envs.append(obstacles)
         
         # Visualize each test environment
         if render:
             env = Problem3Env(obstacles=obstacles)
-            fig = env.visualize(title=f"Test Environment {i+1}")
-            plt.savefig(os.path.join(output_dir, f"test_env{i+1}.png"))
+            fig = env.visualize(title=f"Random Test Environment {i+1}")
+            plt.savefig(os.path.join(output_dir, f"random_test_env{i+1}.png"))
+            plt.close(fig)
+    
+    # Add the released test environments if available
+    released_test_envs = []
+    if HAS_TEST_CASES:
+        # Convert test case 1
+        released_obstacles1 = [
+            {'x': problem3_test1['O1']['x'], 'y': problem3_test1['O1']['y'], 'r': problem3_test1['O1']['r']},
+            {'x': problem3_test1['O2']['x'], 'y': problem3_test1['O2']['y'], 'r': problem3_test1['O2']['r']},
+            {'x': problem3_test1['O3']['x'], 'y': problem3_test1['O3']['y'], 'r': problem3_test1['O3']['r']}
+        ]
+        released_test_envs.append((released_obstacles1, problem3_test1['x_goal'], problem3_test1['y_goal']))
+        
+        # Convert test case 2
+        released_obstacles2 = [
+            {'x': problem3_test_2['O1']['x'], 'y': problem3_test_2['O1']['y'], 'r': problem3_test_2['O1']['r']},
+            {'x': problem3_test_2['O2']['x'], 'y': problem3_test_2['O2']['y'], 'r': problem3_test_2['O2']['r']},
+            {'x': problem3_test_2['O3']['x'], 'y': problem3_test_2['O3']['y'], 'r': problem3_test_2['O3']['r']}
+        ]
+        released_test_envs.append((released_obstacles2, problem3_test_2['x_goal'], problem3_test_2['y_goal']))
+        
+        # Visualize released test environments
+        for i, (obstacles, x_goal, y_goal) in enumerate(released_test_envs):
+            # Sample a specific goal position within the range
+            goal_x = np.random.uniform(x_goal[0], x_goal[1])
+            goal_y = np.random.uniform(y_goal[0], y_goal[1])
+            goal_pos = (goal_x, goal_y)
+            
+            env = Problem3Env(obstacles=obstacles, goal_position=goal_pos)
+            fig = env.visualize(title=f"Released Test Environment {i+1}")
+            plt.savefig(os.path.join(output_dir, f"released_test_env{i+1}.png"))
             plt.close(fig)
     
     # Generate test goals for each environment
     test_env_goal_pairs = []
+    
+    # For random environments
     for env_idx, obstacles in enumerate(test_envs):
         for goal_idx in range(3):  # Generate 3 test goals per environment
             # Use the updated method that checks for obstacle conflicts
             goal_pos = Problem3Env.generate_random_goal(obstacles=obstacles)
-            test_env_goal_pairs.append((env_idx, obstacles, goal_pos))
+            test_env_goal_pairs.append(("random", env_idx, obstacles, goal_pos))
             
             # Visualize each environment-goal pair
             if render:
                 env = Problem3Env(obstacles=obstacles, goal_position=goal_pos)
-                fig = env.visualize(title=f"Test Environment {env_idx+1}, Goal {goal_idx+1}: {goal_pos}")
-                plt.savefig(os.path.join(output_dir, f"test_env{env_idx+1}_goal{goal_idx+1}.png"))
+                fig = env.visualize(title=f"Random Test Environment {env_idx+1}, Goal {goal_idx+1}: {goal_pos}")
+                plt.savefig(os.path.join(output_dir, f"random_test_env{env_idx+1}_goal{goal_idx+1}.png"))
                 plt.close(fig)
+    
+    # For released test environments
+    if HAS_TEST_CASES:
+        for rel_idx, (obstacles, x_goal, y_goal) in enumerate(released_test_envs):
+            # Generate 3 goals per released environment within the specified range
+            for goal_idx in range(3):
+                goal_x = np.random.uniform(x_goal[0], x_goal[1])
+                goal_y = np.random.uniform(y_goal[0], y_goal[1])
+                goal_pos = (goal_x, goal_y)
+                
+                test_env_goal_pairs.append(("released", rel_idx, obstacles, goal_pos))
+                
+                # Visualize each released environment-goal pair
+                if render:
+                    env = Problem3Env(obstacles=obstacles, goal_position=goal_pos)
+                    fig = env.visualize(title=f"Released Test Environment {rel_idx+1}, Goal {goal_idx+1}: {goal_pos}")
+                    plt.savefig(os.path.join(output_dir, f"released_test_env{rel_idx+1}_goal{goal_idx+1}.png"))
+                    plt.close(fig)
     
     # Initialize results tracking
     results = {}
     
     # Test on each environment-goal pair
-    for pair_idx, (env_idx, obstacles, goal_pos) in enumerate(test_env_goal_pairs):
-        print(f"\nTesting on environment {env_idx+1}, goal position {goal_pos}...")
+    for pair_idx, (env_type, env_idx, obstacles, goal_pos) in enumerate(test_env_goal_pairs):
+        pair_name = f"{env_type}_env{env_idx+1}_goal{pair_idx % 3 + 1}"
+        print(f"\nTesting on {pair_name}, goal position {goal_pos}...")
         
         # Initialize tracking for this environment-goal pair
         success_count = 0
@@ -463,14 +543,14 @@ def test_problem3(agent, num_trials=10, max_steps=150, render=True, output_dir=N
         
         # Save visualization if rendering
         if render and output_dir:
-            title = f"Env {env_idx+1}, Goal ({goal_pos[0]:.2f}, {goal_pos[1]:.2f}) - Success: {success_rate:.2f}, Avg Steps: {avg_steps:.1f}"
+            title = f"{pair_name}, Goal ({goal_pos[0]:.2f}, {goal_pos[1]:.2f}) - Success: {success_rate:.2f}, Avg Steps: {avg_steps:.1f}"
             ax.set_title(title)
-            plt.savefig(os.path.join(output_dir, f"test_env{env_idx+1}_goal{pair_idx % 3 + 1}_results.png"))
+            plt.savefig(os.path.join(output_dir, f"{pair_name}_results.png"))
             plt.close(fig)
         
         # Store results
-        pair_key = f"env{env_idx+1}_goal{pair_idx % 3 + 1}"
-        results[pair_key] = {
+        results[pair_name] = {
+            'env_type': env_type,
             'env_idx': env_idx,
             'goal_position': goal_pos,
             'success_rate': success_rate,
@@ -500,6 +580,38 @@ def test_problem3(agent, num_trials=10, max_steps=150, render=True, output_dir=N
     
     overall_avg_steps = total_steps_sum / overall_successful_trials if overall_successful_trials > 0 else float('inf')
     
+    # Calculate stats for random and released environments separately
+    if HAS_TEST_CASES:
+        random_results = {k: v for k, v in results.items() if v['env_type'] == 'random'}
+        released_results = {k: v for k, v in results.items() if v['env_type'] == 'released'}
+        
+        # Random environments stats
+        random_success_count = sum(v["success_count"] for v in random_results.values())
+        random_total_trials = sum(v["total_trials"] for v in random_results.values())
+        random_successful_trials = sum(v["successful_trials"] for v in random_results.values())
+        random_success_rate = random_success_count / random_total_trials if random_total_trials > 0 else 0
+        
+        # Released environments stats
+        released_success_count = sum(v["success_count"] for v in released_results.values())
+        released_total_trials = sum(v["total_trials"] for v in released_results.values())
+        released_successful_trials = sum(v["successful_trials"] for v in released_results.values())
+        released_success_rate = released_success_count / released_total_trials if released_total_trials > 0 else 0
+        
+        # Add to results
+        results['random_overall'] = {
+            'success_rate': random_success_rate,
+            'success_count': random_success_count,
+            'total_trials': random_total_trials,
+            'successful_trials': random_successful_trials
+        }
+        
+        results['released_overall'] = {
+            'success_rate': released_success_rate,
+            'success_count': released_success_count,
+            'total_trials': released_total_trials,
+            'successful_trials': released_successful_trials
+        }
+    
     results['overall'] = {
         'success_rate': overall_success_rate,
         'avg_steps': float(overall_avg_steps) if overall_avg_steps != float('inf') else "inf",
@@ -519,4 +631,9 @@ def test_problem3(agent, num_trials=10, max_steps=150, render=True, output_dir=N
     overall_avg_steps_str = f"{overall_avg_steps:.1f}" if overall_avg_steps != float('inf') else "inf"
     print(f"  Average Steps to Goal: {overall_avg_steps_str}")
     
+    # Print released test case results if available
+    if HAS_TEST_CASES:
+        print("\nReleased Test Cases Results:")
+        print(f"  Success Rate: {released_success_rate:.2f}")
+        
     return results

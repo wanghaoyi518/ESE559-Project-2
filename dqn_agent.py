@@ -341,29 +341,16 @@ class EnhancedDQNAgent(DQNAgent):
                         gamma=gamma, epsilon=epsilon, epsilon_min=epsilon_min,
                         epsilon_decay=epsilon_decay, target_update_freq=target_update_freq,
                         memory_size=memory_size, device=device, goal_position=goal_position)
+        self.robot_radius = 0.08
 
-    def get_enhanced_state(self, state, obstacles):
-        """
-        Create an enhanced state representation that includes obstacle information
-        with an explicit feature for nearest obstacle distance.
-        
-        Args:
-            state (tuple): Robot state (px, py, phi).
-            obstacles (list): List of obstacle dictionaries.
-            
-        Returns:
-            numpy.ndarray: Enhanced state representation.
-        """
+
+    def get_enhanced_state(self, state, obstacles, safety_distance=0.15):
         # Extract basic state
         px, py, phi = state
         
         # Calculate goal-relative features
         gx, gy = self.goal_position
-        
-        # Distance to goal
         dist_to_goal = np.sqrt((px - gx)**2 + (py - gy)**2)
-        
-        # Angle to goal relative to current orientation
         angle_to_goal = np.arctan2(gy - py, gx - px)
         angle_diff = self.normalize_angle(angle_to_goal - phi)
         
@@ -371,23 +358,21 @@ class EnhancedDQNAgent(DQNAgent):
         sorted_obstacles = sorted(obstacles, key=lambda obs: 
                                 np.sqrt((px - obs['x'])**2 + (py - obs['y'])**2))
         
-        # Calculate distance to nearest obstacle (accounting for obstacle radius)
+        # Calculate distance to nearest obstacle WITH SAFETY MARGIN
         if sorted_obstacles:
             nearest_obs = sorted_obstacles[0]
-            nearest_obs_dist = np.sqrt((px - nearest_obs['x'])**2 + (py - nearest_obs['y'])**2) - nearest_obs['r']
-            nearest_obs_dist = max(0.01, nearest_obs_dist)  # Ensure it's not negative or zero
+            nearest_obs_dist = np.sqrt((px - nearest_obs['x'])**2 + (py - nearest_obs['y'])**2) - nearest_obs['r'] - self.robot_radius - safety_distance
+            nearest_obs_dist = max(0.01, nearest_obs_dist)  # Ensure it's not negative
         else:
             nearest_obs_dist = 10.0  # Large value if no obstacles
         
-        # Calculate distances and angles to the three obstacles
+        # Calculate distances and angles to obstacles WITH SAFETY MARGINS
         obstacle_features = []
-        
-        # Take the three obstacles (or fewer if there are less than 3)
         for i in range(min(3, len(sorted_obstacles))):
             obs = sorted_obstacles[i]
-            
-            # Distance to obstacle center
-            dist = np.sqrt((px - obs['x'])**2 + (py - obs['y'])**2)
+            # Distance with safety margin
+            dist = np.sqrt((px - obs['x'])**2 + (py - obs['y'])**2) - obs['r'] - self.robot_radius - safety_distance
+            dist = max(0.01, dist)
             
             # Angle to obstacle relative to current orientation
             angle = np.arctan2(obs['y'] - py, obs['x'] - px)
@@ -396,20 +381,13 @@ class EnhancedDQNAgent(DQNAgent):
             obstacle_features.extend([dist, rel_angle])
         
         # Pad with zeros if fewer than 3 obstacles
-        while len(obstacle_features) < 6:  # 6 = 3 obstacles * 2 features (dist, angle)
-            obstacle_features.extend([10.0, 0.0])  # Large distance, zero angle
+        while len(obstacle_features) < 6:
+            obstacle_features.extend([10.0, 0.0])
         
-        # Combine all features
-        # Add nearest_obs_dist as a dedicated feature just after goal information
+        # Same state dimension as before
         return np.array([px, py, phi, dist_to_goal, angle_diff, nearest_obs_dist] + obstacle_features, 
                         dtype=np.float32)
-        # return np.array([
-        #     px, py, phi, dist_to_goal, angle_diff, nearest_obs_dist
-        # ] + [
-        #     np.sqrt((px - obs['x'])**2 + (py - obs['y'])**2) - obs['r'] if 'r' in obs else 10.0
-        #     for obs in sorted_obstacles[:3]  # Only take up to 3 obstacles
-        # ], dtype=np.float32)
-
+    
     def select_action(self, state, obstacles, epsilon=None):
         """
         Select an action using epsilon-greedy policy with obstacle awareness.
