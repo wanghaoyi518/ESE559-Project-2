@@ -106,6 +106,14 @@ def train(agent, num_episodes=2000, batch_size=64,
             'memory_size': agent.memory_size,
             'device': str(agent.device)
         },
+        'reward_components': {
+            'base_reward': -0.02,
+            'progress_reward_factor': 1.5,  # Multiplied by distance reduction
+            'collision_penalty': -10.0,
+            'out_of_bounds_penalty': -10.0,
+            'goal_reward': 30.0,
+            'stay_still_penalty': -0.2  # For action_idx 22
+        },
         'timestamp': timestamp,
         'start_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
@@ -257,10 +265,10 @@ def train(agent, num_episodes=2000, batch_size=64,
 
 def train_problem2(agent, num_episodes=2000, batch_size=64, 
                   save_freq=100, log_freq=10, render=False, results_dir='results',
-                  update_target_freq=10, max_steps=150, additional_envs=20, hard_test_envs=10):
+                  update_target_freq=10, max_steps=150, additional_envs=20, hard_envs=10):
     """
     Train the DQN agent for Problem 2 with multiple environments including random ones
-    and ones hard test cases.
+    and hard challenging environments.
     
     Args:
         agent (EnhancedDQNAgent): The enhanced DQN agent to train.
@@ -273,7 +281,7 @@ def train_problem2(agent, num_episodes=2000, batch_size=64,
         update_target_freq (int): Number of episodes after which to update target network.
         max_steps (int): Maximum steps per episode.
         additional_envs (int): Number of additional random environments to generate.
-        hard_test_envs (int): Number of environments hard test cases to generate.
+        hard_envs (int): Number of hard challenging environments to include.
         
     Returns:
         tuple: (rewards, run_dir) - List of rewards and the directory where results are saved.
@@ -295,8 +303,8 @@ def train_problem2(agent, num_episodes=2000, batch_size=64,
         'update_target_freq': update_target_freq,
         'max_steps': max_steps,
         'additional_envs': additional_envs,
-        'hard_test_envs': hard_test_envs,
-        'total_environments': 3 + additional_envs + hard_test_envs,  # Updated count
+        'hard_envs': hard_envs,
+        'total_environments': 3 + additional_envs + hard_envs,  # Updated count
         'agent_config': {
             'state_dim': agent.state_dim,
             'action_dim': agent.action_dim,
@@ -308,6 +316,14 @@ def train_problem2(agent, num_episodes=2000, batch_size=64,
             'epsilon_decay': agent.epsilon_decay,
             'memory_size': agent.memory_size,
             'device': str(agent.device)
+        },
+        'reward_components': {
+            'base_reward': -0.02,
+            'progress_reward_factor': 1.5,  # Multiplied by distance reduction
+            'collision_penalty': -10.0,
+            'out_of_bounds_penalty': -10.0,
+            'goal_reward': 30.0,
+            'stay_still_penalty': -0.2  # For action_idx 22
         },
         'timestamp': timestamp,
         'start_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -325,7 +341,7 @@ def train_problem2(agent, num_episodes=2000, batch_size=64,
     # Get training environments with additional random ones
     training_envs = Problem2Env.get_training_environments(
         additional_envs=additional_envs,
-        hard_test_envs=hard_test_envs
+        hard_envs=hard_envs
     )
     
     # Create a directory for environment visualizations
@@ -337,10 +353,10 @@ def train_problem2(agent, num_episodes=2000, batch_size=64,
         env = Problem2Env(obstacles=obstacles)
         if i < 3:
             title = f"Predefined Environment {i+1}"
-        elif i < 3 + hard_test_envs:
-            title = f"Test-Similar Environment {i-2}"
+        elif i < 3 + hard_envs:
+            title = f"Hard Environment {i-2}"
         else:
-            title = f"Random Environment {i-2-hard_test_envs}"
+            title = f"Random Environment {i-2-hard_envs}"
             
         fig = env.visualize(title=title)
         plt.savefig(os.path.join(env_viz_dir, f"env_{i+1}.png"))
@@ -535,7 +551,7 @@ def train_problem2(agent, num_episodes=2000, batch_size=64,
 
 def train_problem3(agent, num_episodes=2000, batch_size=64, 
                   save_freq=100, log_freq=10, render=False, results_dir='results',
-                  update_target_freq=10, max_steps=150, additional_envs=20, hard_test_envs=10):
+                  update_target_freq=10, max_steps=150, additional_envs=20, hard_envs=10):
     """
     Train the DQN agent for Problem 3 with multiple environments and variable goals.
     
@@ -550,7 +566,7 @@ def train_problem3(agent, num_episodes=2000, batch_size=64,
         update_target_freq (int): Number of episodes after which to update target network.
         max_steps (int): Maximum steps per episode.
         additional_envs (int): Number of additional random environments to generate.
-        hard_test_envs (int): Number of environments hard test cases to generate.
+        hard_envs (int): Number of hard challenging environments to include.
         
     Returns:
         tuple: (rewards, run_dir) - List of rewards and the directory where results are saved.
@@ -572,8 +588,8 @@ def train_problem3(agent, num_episodes=2000, batch_size=64,
         'update_target_freq': update_target_freq,
         'max_steps': max_steps,
         'additional_envs': additional_envs,
-        'hard_test_envs': hard_test_envs,
-        'total_environments': 3 + additional_envs + hard_test_envs,  # Updated count
+        'hard_envs': hard_envs,
+        'total_environments': 3 + additional_envs + hard_envs,  # Updated count
         'agent_config': {
             'state_dim': agent.state_dim,
             'action_dim': agent.action_dim,
@@ -585,6 +601,14 @@ def train_problem3(agent, num_episodes=2000, batch_size=64,
             'epsilon_decay': agent.epsilon_decay,
             'memory_size': agent.memory_size,
             'device': str(agent.device)
+        },
+        'reward_components': {
+            'base_reward': -0.02,
+            'progress_reward_factor': 1.5,  # Multiplied by distance reduction
+            'collision_penalty': -10.0,
+            'out_of_bounds_penalty': -10.0,
+            'goal_reward': 30.0,
+            'stay_still_penalty': -0.2  # For action_idx 22
         },
         'timestamp': timestamp,
         'start_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -599,10 +623,10 @@ def train_problem3(agent, num_episodes=2000, batch_size=64,
     epsilons = []
     env_success_tracking = {}  # Track success by environment-goal pair
     
-    # Get training environments and goals with additional ones hard test cases
+    # Get training environments and goals with additional hard challenging environments
     training_envs_goals = Problem3Env.get_training_environments_with_goals(
         additional_envs=additional_envs,
-        hard_test_envs=hard_test_envs
+        hard_envs=hard_envs
     )
     
     # Create a directory for environment visualizations
@@ -614,10 +638,10 @@ def train_problem3(agent, num_episodes=2000, batch_size=64,
         env = Problem3Env(obstacles=obstacles, goal_position=goal_pos)
         if i < 3:
             title = f"Predefined Environment {i+1}, Goal: {goal_pos}"
-        elif i < 3 + hard_test_envs:
-            title = f"Test-Similar Environment {i-2}, Goal: {goal_pos}"
+        elif i < 3 + hard_envs:
+            title = f"Hard Environment {i-2}, Goal: {goal_pos}"
         else:
-            title = f"Random Environment {i-2-hard_test_envs}, Goal: {goal_pos}"
+            title = f"Random Environment {i-2-hard_envs}, Goal: {goal_pos}"
             
         fig = env.visualize(title=title)
         plt.savefig(os.path.join(env_viz_dir, f"env_goal_{i+1}.png"))

@@ -635,5 +635,7 @@ def test_problem3(agent, num_trials=10, max_steps=150, render=True, output_dir=N
     if HAS_TEST_CASES:
         print("\nReleased Test Cases Results:")
         print(f"  Success Rate: {released_success_rate:.2f}")
+        overall_avg_steps_str = f"{overall_avg_steps:.1f}" if overall_avg_steps != float('inf') else "inf"
+        print(f"  Average Steps to Goal: {overall_avg_steps_str}")
         
     return results

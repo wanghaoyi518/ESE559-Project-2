@@ -177,3 +177,5 @@ cython_debug/
 .results/
 
 *.pth
+visualize_hard_environments.py
+*.png

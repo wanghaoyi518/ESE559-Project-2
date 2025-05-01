@@ -201,24 +201,19 @@ class RobotEnv:
         curr_dist = np.sqrt((px_next - gx)**2 + (py_next - gy)**2)
         
         # Base reward: smaller penalty
-        reward = -0.1
+        reward = -0.05
         
         # Stronger progress reward
         dist_diff = prev_dist - curr_dist
-        reward += 0.8 * dist_diff
-        
-        # # Add potential-based shaping reward
-        # potential_prev = -prev_dist
-        # potential_curr = -curr_dist
-        # reward += 0.8 * (potential_curr - potential_prev * self.gamma)
+        reward += 1.5 * dist_diff
         
         # Collision penalty
         if collision:
-            reward = -10.0  # Reduced to avoid too harsh penalties
+            reward = -20.0  # Reduced to avoid too harsh penalties
             return reward, True
         
         if out_of_bounds:
-            reward = -10.0
+            reward = -20.0
             return reward, True
     
         # Goal reward
@@ -312,15 +307,15 @@ class Problem2Env(RobotEnv):
         self.goal_pos = goal_position
     
     @staticmethod
-    def get_training_environments(additional_envs=20, hard_test_envs=10):
+    def get_training_environments(additional_envs=20, hard_envs=10):
         """
         Return training environments for Problem 2 with additional random environments
-        and environments hard test cases.
+        and hard challenging environments.
         
         Args:
             additional_envs (int): Number of additional random environments to generate
                                    beyond the predefined ones.
-            hard_test_envs (int): Number of environments hard test cases to generate.
+            hard_envs (int): Number of hard challenging environments to include.
         
         Returns:
             list: List of obstacle configurations for training.
@@ -347,8 +342,8 @@ class Problem2Env(RobotEnv):
             ]
         ]
         
-        # Generate environments hard test cases
-        hard_envs = Problem2Env.generate_hard_test_environments(hard_test_envs)
+        # Generate hard challenging environments
+        hard_environments = Problem2Env.get_hard_environments(hard_envs)
         
         # Generate additional random environments
         random_envs = []
@@ -356,68 +351,139 @@ class Problem2Env(RobotEnv):
             random_envs.append(Problem2Env.generate_random_training_environment())
         
         # Combine predefined and random environments
-        all_environments = predefined_envs + hard_envs + random_envs
+        all_environments = predefined_envs + hard_environments + random_envs
         
         print(f"Created {len(all_environments)} training environments "
-              f"({len(predefined_envs)} predefined, {len(hard_envs)} hard test, "
+              f"({len(predefined_envs)} predefined, {len(hard_environments)} hard, "
               f"{len(random_envs)} random)")
         
         return all_environments
     
     @staticmethod
-    def generate_hard_test_environments(num_environments=10, variation=0.1):
+    def get_hard_environments(num_environments=10):
         """
-        Generate environments that are hard the test environments from test_case.py.
+        Generate hard challenging environments based on analysis of test cases.
         
         Args:
-            num_environments (int): Number of environments to generate.
-            variation (float): Maximum variation in obstacle positions from the test case.
+            num_environments (int): Number of hard environments to generate.
             
         Returns:
-            list: List of obstacle configurations.
+            list: List of hard obstacle configurations.
         """
-        hard_envs = []
+        # Define templates of hard environments based on analysis of test case patterns
+        hard_env_templates = [
+            # Triangular pattern with maximum size obstacles
+            [
+                {'x': -0.6, 'y': 0.5, 'r': 0.2},
+                {'x': -0.5, 'y': -0.5, 'r': 0.2},
+                {'x': 0.5, 'y': 0.5, 'r': 0.2}
+            ],
+            
+            # Line of obstacles blocking the direct path
+            [
+                {'x': 0.0, 'y': 0.0, 'r': 0.2},
+                {'x': 0.4, 'y': 0.4, 'r': 0.2},
+                {'x': 0.8, 'y': 0.8, 'r': 0.2}
+            ],
+            
+            # Obstacles forming a narrow corridor
+            [
+                {'x': 0.0, 'y': 0.4, 'r': 0.2},
+                {'x': 0.0, 'y': -0.4, 'r': 0.2},
+                {'x': 0.6, 'y': 0.0, 'r': 0.2}
+            ],
+            
+            # Obstacles that force a long detour
+            [
+                {'x': 0.0, 'y': 0.0, 'r': 0.2},
+                {'x': 0.5, 'y': 0.5, 'r': 0.2},
+                {'x': -0.5, 'y': 0.5, 'r': 0.2}
+            ],
+            
+            # Obstacles that create a maze-like environment
+            [
+                {'x': -0.4, 'y': 0.4, 'r': 0.2},
+                {'x': 0.4, 'y': 0.4, 'r': 0.2},
+                {'x': 0.0, 'y': -0.2, 'r': 0.2}
+            ],
+            
+            # Obstacles in the corners and center
+            [
+                {'x': -0.8, 'y': 0.8, 'r': 0.2},
+                {'x': 0.8, 'y': 0.8, 'r': 0.2},
+                {'x': 0.0, 'y': 0.0, 'r': 0.2}
+            ],
+            
+            # Obstacles creating a zigzag path
+            [
+                {'x': -0.4, 'y': 0.2, 'r': 0.2},
+                {'x': 0.0, 'y': -0.2, 'r': 0.2},
+                {'x': 0.4, 'y': 0.2, 'r': 0.2}
+            ],
+            
+            # Obstacles in upper half creating a barrier
+            [
+                {'x': -0.8, 'y': 0.5, 'r': 0.2},
+                {'x': 0.0, 'y': 0.5, 'r': 0.2},
+                {'x': 0.8, 'y': 0.5, 'r': 0.2}
+            ],
+            
+            # Asymmetric obstacle arrangement
+            [
+                {'x': -0.7, 'y': 0.3, 'r': 0.2},
+                {'x': 0.3, 'y': 0.7, 'r': 0.2},
+                {'x': 0.0, 'y': -0.5, 'r': 0.2}
+            ],
+            
+            # Obstacles creating a bottleneck
+            [
+                {'x': 0.0, 'y': 0.7, 'r': 0.2},
+                {'x': 0.0, 'y': -0.7, 'r': 0.2},
+                {'x': 0.7, 'y': 0.0, 'r': 0.2}
+            ]
+        ]
         
-        # Try to import test cases
+        # Include the actual test case if specified
         try:
             from test_case import problem2_test
-            has_test_cases = True
-        except ImportError:
-            has_test_cases = False
-            print("Warning: test_case.py not found. Using predefined template for hard environments.")
-        
-        if has_test_cases:
-            # Use the actual test case as a template
-            template = [
+            actual_test_case = [
                 {'x': problem2_test['O1']['x'], 'y': problem2_test['O1']['y'], 'r': problem2_test['O1']['r']},
                 {'x': problem2_test['O2']['x'], 'y': problem2_test['O2']['y'], 'r': problem2_test['O2']['r']},
                 {'x': problem2_test['O3']['x'], 'y': problem2_test['O3']['y'], 'r': problem2_test['O3']['r']}
             ]
-        else:
-            # Predefined template hard the test case
-            template = [
-                {'x': -0.6, 'y': 0.5, 'r': 0.2},
-                {'x': -0.5, 'y': -0.5, 'r': 0.2},
-                {'x': 0.5, 'y': 0.5, 'r': 0.2}
-            ]
+            hard_env_templates.append(actual_test_case)
+        except ImportError:
+            # Test case not available, ignore
+            pass
         
-        # Create variations of the template
-        for _ in range(num_environments):
-            new_env = []
-            for obs in template:
-                # Create a variation of the obstacle
-                new_obs = {
-                    'x': obs['x'] + np.random.uniform(-variation, variation),
-                    'y': obs['y'] + np.random.uniform(-variation, variation),
-                    'r': np.random.uniform(0.18, 0.2)  # Use large radii (harder)
-                }
-                new_env.append(new_obs)
+        # Select environments based on the requested number
+        if num_environments <= len(hard_env_templates):
+            return hard_env_templates[:num_environments]
+        
+        # If more environments are needed, create variations
+        hard_environments = hard_env_templates.copy()
+        
+        # Create variations of templates to reach the desired number
+        while len(hard_environments) < num_environments:
+            # Select a random template
+            template_idx = np.random.randint(0, len(hard_env_templates))
+            template = hard_env_templates[template_idx]
             
-            # Ensure the obstacles don't overlap and aren't too close to the goal or start
-            if Problem2Env._validate_environment(new_env):
-                hard_envs.append(new_env)
+            # Create a variation with small perturbations
+            variation = []
+            for obs in template:
+                new_obs = {
+                    'x': obs['x'] + np.random.uniform(-0.1, 0.1),
+                    'y': obs['y'] + np.random.uniform(-0.1, 0.1),
+                    'r': 0.2  # Keep maximum radius for difficulty
+                }
+                variation.append(new_obs)
+            
+            # Validate the environment
+            if Problem2Env._validate_environment(variation):
+                hard_environments.append(variation)
         
-        return hard_envs
+        return hard_environments
 
     @staticmethod
     def _validate_environment(obstacles, min_dist_between_obstacles=0.1, 
@@ -475,8 +541,7 @@ class Problem2Env(RobotEnv):
         """
         obstacles = []
         
-        # Minimum distance between obstacles (smaller than in test environments
-        # to create more challenging scenarios)
+        # Minimum distance between obstacles
         min_distance = 0.3
         
         # Obstacle placement patterns to ensure diversity
@@ -655,14 +720,14 @@ class Problem3Env(Problem2Env):
             return (np.random.uniform(-1.1, -0.9), np.random.uniform(0.8, 1.0))
     
     @staticmethod
-    def get_training_environments_with_goals(additional_envs=20, hard_test_envs=10):
+    def get_training_environments_with_goals(additional_envs=20, hard_envs=10):
         """
-        Return training environments and goals for Problem 3 with environments hard test cases.
+        Return training environments and goals for Problem 3 with hard challenging environments.
         
         Args:
             additional_envs (int): Number of additional random environments to generate
                                    beyond the predefined ones.
-            hard_test_envs (int): Number of environments hard test cases to generate.
+            hard_envs (int): Number of hard challenging environments to generate.
         
         Returns:
             list: List of (obstacle configuration, goal position) pairs for training.
@@ -691,8 +756,8 @@ class Problem3Env(Problem2Env):
             ], (-1.0, 0.9))
         ]
         
-        # Generate environments and goals hard test cases
-        hard_envs_goals = Problem3Env.generate_hard_test_environments_with_goals(hard_test_envs)
+        # Generate environments and goals for hard test cases
+        hard_envs_goals = Problem3Env.get_hard_environments_with_goals(hard_envs)
         
         # Generate additional random environments with random goals
         random_envs_goals = []
@@ -706,95 +771,138 @@ class Problem3Env(Problem2Env):
         all_environments_goals = predefined_envs_goals + hard_envs_goals + random_envs_goals
         
         print(f"Created {len(all_environments_goals)} training environments with goals "
-              f"({len(predefined_envs_goals)} predefined, {len(hard_envs_goals)} hard test, "
+              f"({len(predefined_envs_goals)} predefined, {len(hard_envs_goals)} hard, "
               f"{len(random_envs_goals)} random)")
         
         return all_environments_goals
 
     @staticmethod
-    def generate_hard_test_environments_with_goals(num_environments=10, variation=0.1):
+    def get_hard_environments_with_goals(num_environments=10):
         """
-        Generate environments and goals that are hard the test environments from test_case.py.
+        Generate hard challenging environments with goals based on pattern analysis.
         
         Args:
-            num_environments (int): Number of environments to generate.
-            variation (float): Maximum variation in obstacle positions from the test case.
+            num_environments (int): Number of hard environments to generate.
             
         Returns:
             list: List of (obstacle configuration, goal position) pairs.
         """
         hard_envs_goals = []
         
-        # Try to import test cases
-        try:
-            from test_case import problem3_test1, problem3_test_2
-            has_test_cases = True
-        except ImportError:
-            has_test_cases = False
-            print("Warning: test_case.py not found. Using predefined templates for hard environments.")
+        # Define hard environment templates with goal regions
+        hard_env_templates = [
+            # Case 1: Goal in upper-right quadrant, obstacles block direct path
+            ([
+                {'x': 1.0, 'y': 0.0, 'r': 0.2},
+                {'x': 0.3, 'y': 1.0, 'r': 0.2},
+                {'x': 0.3, 'y': 0.5, 'r': 0.2}
+            ], [0.8, 1.0], [0.8, 1.0]),
+            
+            # Case 2: Goal in upper-left quadrant, obstacles in line
+            ([
+                {'x': -1.0, 'y': 0.3, 'r': 0.2},
+                {'x': -1.0, 'y': 1.3, 'r': 0.2},
+                {'x': -0.2, 'y': 0.9, 'r': 0.2}
+            ], [-1.1, -0.9], [0.8, 1.0]),
+            
+            # Case 3: Goal in upper-right, obstacles create narrow passage
+            ([
+                {'x': 0.5, 'y': 0.0, 'r': 0.2},
+                {'x': 0.5, 'y': 0.6, 'r': 0.2},
+                {'x': 0.0, 'y': 0.3, 'r': 0.2}
+            ], [0.8, 1.0], [0.8, 1.0]),
+            
+            # Case 4: Goal in upper-left, obstacles create zigzag path
+            ([
+                {'x': -0.7, 'y': 0.2, 'r': 0.2},
+                {'x': -0.2, 'y': 0.6, 'r': 0.2},
+                {'x': -0.7, 'y': 0.6, 'r': 0.2}
+            ], [-1.1, -0.9], [0.8, 1.0]),
+            
+            # Case 5: Goal in upper-right, obstacles block corners
+            ([
+                {'x': 0.9, 'y': -0.1, 'r': 0.2},
+                {'x': 0.2, 'y': 0.9, 'r': 0.2},
+                {'x': 0.2, 'y': 0.4, 'r': 0.2}
+            ], [0.7, 0.9], [0.7, 0.9]),
+            
+            # Case 6: Goal in upper-left, obstacles form barrier
+            ([
+                {'x': -0.5, 'y': 0.5, 'r': 0.2},
+                {'x': 0.0, 'y': 0.5, 'r': 0.2},
+                {'x': -1.0, 'y': 0.0, 'r': 0.2}
+            ], [-1.1, -0.9], [0.8, 1.0])
+            
+            # # Case 7: Goal in upper-right, obstacles in triangular pattern
+            # ([
+            #     {'x': 0.4, 'y': 0.4, 'r': 0.2},
+            #     {'x': 0.0, 'y': 0.0, 'r': 0.2},
+            #     {'x': 0.8, 'y': 0.0, 'r': 0.2}
+            # ], [0.8, 1.0], [0.8, 1.0]),
+            
+            # # Case 8: Goal in upper-left, obstacles in triangular pattern
+            # ([
+            #     {'x': -0.4, 'y': 0.4, 'r': 0.2},
+            #     {'x': 0.0, 'y': 0.0, 'r': 0.2},
+            #     {'x': -0.8, 'y': 0.0, 'r': 0.2}
+            # ], [-1.1, -0.9], [0.8, 1.0]),
+            
+            # # Case 9: Goal in upper-right, obstacles form maze
+            # ([
+            #     {'x': 0.0, 'y': 0.0, 'r': 0.2},
+            #     {'x': 0.5, 'y': 0.0, 'r': 0.2},
+            #     {'x': 0.0, 'y': 0.5, 'r': 0.2}
+            # ], [0.8, 1.0], [0.8, 1.0]),
+            
+            # # Case 10: Goal in upper-left, obstacles form maze
+            # ([
+            #     {'x': 0.0, 'y': 0.0, 'r': 0.2},
+            #     {'x': -0.5, 'y': 0.0, 'r': 0.2},
+            #     {'x': 0.0, 'y': 0.5, 'r': 0.2}
+            # ], [-1.1, -0.9], [0.8, 1.0])
+        ]
         
-        if has_test_cases:
-            # Use the actual test cases as templates
-            templates = [
-                # Template 1
-                ([
-                    {'x': problem3_test1['O1']['x'], 'y': problem3_test1['O1']['y'], 'r': problem3_test1['O1']['r']},
-                    {'x': problem3_test1['O2']['x'], 'y': problem3_test1['O2']['y'], 'r': problem3_test1['O2']['r']},
-                    {'x': problem3_test1['O3']['x'], 'y': problem3_test1['O3']['y'], 'r': problem3_test1['O3']['r']}
-                ], problem3_test1['x_goal'], problem3_test1['y_goal']),
+        # Process each template to generate hard environments with goals
+        for template_obstacles, x_goal_range, y_goal_range in hard_env_templates:
+            if len(hard_envs_goals) >= num_environments:
+                break
                 
-                # Template 2
-                ([
-                    {'x': problem3_test_2['O1']['x'], 'y': problem3_test_2['O1']['y'], 'r': problem3_test_2['O1']['r']},
-                    {'x': problem3_test_2['O2']['x'], 'y': problem3_test_2['O2']['y'], 'r': problem3_test_2['O2']['r']},
-                    {'x': problem3_test_2['O3']['x'], 'y': problem3_test_2['O3']['y'], 'r': problem3_test_2['O3']['r']}
-                ], problem3_test_2['x_goal'], problem3_test_2['y_goal'])
-            ]
-        else:
-            # Predefined templates hard the test cases
-            templates = [
-                # Template 1 - hard problem3_test1
-                ([
-                    {'x': 1.0, 'y': 0, 'r': 0.2},
-                    {'x': 0.3, 'y': 1.0, 'r': 0.2},
-                    {'x': 0.3, 'y': 0.5, 'r': 0.2}
-                ], [0.8, 1], [0.8, 1]),
-                
-                # Template 2 - hard problem3_test_2
-                ([
-                    {'x': -1, 'y': 0.3, 'r': 0.2},
-                    {'x': -1, 'y': 1.3, 'r': 0.2},
-                    {'x': -0.2, 'y': 0.9, 'r': 0.2}
-                ], [-1.1, -0.9], [0.8, 1])
-            ]
+            # Generate goal within the specified range
+            goal_x = np.random.uniform(x_goal_range[0], x_goal_range[1])
+            goal_y = np.random.uniform(y_goal_range[0], y_goal_range[1])
+            goal_pos = (goal_x, goal_y)
+            
+            # Add the environment-goal pair
+            if Problem3Env._validate_environment_with_goal(template_obstacles, goal_pos):
+                hard_envs_goals.append((template_obstacles, goal_pos))
         
-        # Create variations of the templates
-        for template_idx in range(len(templates)):
-            for _ in range(num_environments // len(templates) + 1):  # Ensure we get enough environments
-                template_obstacles, x_goal_range, y_goal_range = templates[template_idx]
-                
-                # Create a variation of the obstacle configuration
-                new_obstacles = []
-                for obs in template_obstacles:
-                    new_obs = {
-                        'x': obs['x'] + np.random.uniform(-variation, variation),
-                        'y': obs['y'] + np.random.uniform(-variation, variation),
-                        'r': np.random.uniform(0.18, 0.2)  # Use large radii (harder)
-                    }
-                    new_obstacles.append(new_obs)
-                
-                # Generate a random goal position within the specified range
-                goal_x = np.random.uniform(x_goal_range[0], x_goal_range[1])
-                goal_y = np.random.uniform(y_goal_range[0], y_goal_range[1])
-                goal_pos = (goal_x, goal_y)
-                
-                # Ensure the obstacles don't overlap and aren't too close to the goal or start
-                if Problem3Env._validate_environment_with_goal(new_obstacles, goal_pos):
-                    hard_envs_goals.append((new_obstacles, goal_pos))
-                
-                # If we have enough environments, break
-                if len(hard_envs_goals) >= num_environments:
-                    return hard_envs_goals
+        # If more environments are needed, create variations
+        original_templates = hard_env_templates.copy()
+        template_idx = 0
+        
+        while len(hard_envs_goals) < num_environments:
+            # Get the next template
+            obstacles, x_goal_range, y_goal_range = original_templates[template_idx % len(original_templates)]
+            template_idx += 1
+            
+            # Create variation with small perturbations
+            variation = []
+            for obs in obstacles:
+                new_obs = {
+                    'x': obs['x'] + np.random.uniform(-0.1, 0.1),
+                    'y': obs['y'] + np.random.uniform(-0.1, 0.1),
+                    'r': 0.2  # Keep maximum radius for difficulty
+                }
+                variation.append(new_obs)
+            
+            # Generate goal within the specified range
+            goal_x = np.random.uniform(x_goal_range[0], x_goal_range[1])
+            goal_y = np.random.uniform(y_goal_range[0], y_goal_range[1])
+            goal_pos = (goal_x, goal_y)
+            
+            # Validate and add the environment-goal pair
+            if Problem3Env._validate_environment_with_goal(variation, goal_pos):
+                hard_envs_goals.append((variation, goal_pos))
         
         return hard_envs_goals
 
